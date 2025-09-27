@@ -17,13 +17,15 @@ import Modal from '../components/ui/Modal';
  * Protected route - requires wallet connection
  */
 const Profile = () => {
-  const { user, disconnectWallet, balance, refreshBalance } = useAuth();
+  const { user, disconnectWallet, balance, refreshBalance, createOrganizerOnChain, testMovePackage, debugZkLogin } = useAuth();
   const { loadUserTickets, tickets, isLoading, error } = useBlockchain();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [userEvents, setUserEvents] = useState([]);
+  const [moveTestResult, setMoveTestResult] = useState('');
+  const [isTestingMove, setIsTestingMove] = useState(false);
 
   // Redirect if not connected
   useEffect(() => {
@@ -101,6 +103,38 @@ const Profile = () => {
     if (user?.address) {
       await refreshBalance();
       // In a real app, you'd also refresh user events here
+    }
+  };
+
+  /**
+   * Test Move contract integration
+   */
+  const handleTestMoveContract = async () => {
+    setIsTestingMove(true);
+    setMoveTestResult('');
+    
+    try {
+      // First, test if package exists
+      setMoveTestResult('🔍 Checking Move package...');
+      const packageExists = await testMovePackage();
+      
+      if (!packageExists) {
+        setMoveTestResult('❌ Move package not found. Please update PACKAGE_ID in moveConfig.js');
+        return;
+      }
+      
+      setMoveTestResult('✅ Move package found! Creating organizer...');
+      
+      // Create organizer on-chain
+      const result = await createOrganizerOnChain("https://myawesomeevents.com");
+      
+      setMoveTestResult(`🎉 Success! Organizer created on-chain!\nTransaction: ${result.digest}`);
+      
+    } catch (error) {
+      console.error('Move test failed:', error);
+      setMoveTestResult(`❌ Move test failed: ${error.message}`);
+    } finally {
+      setIsTestingMove(false);
     }
   };
 
@@ -215,6 +249,60 @@ const Profile = () => {
               >
                 Disconnect Wallet
               </Button>
+            </Card.Body>
+          </Card>
+          
+          {/* Move Contract Test Card */}
+          <Card className="mt-6">
+            <Card.Header>
+              <Card.Title className="flex items-center gap-2">
+                <span className="text-lg">⛓️</span>
+                Move Contract Test
+              </Card.Title>
+            </Card.Header>
+            <Card.Body className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Test the integration with your published Move contract
+              </p>
+              
+              <Button
+                onClick={handleTestMoveContract}
+                disabled={isTestingMove}
+                className="w-full"
+              >
+                {isTestingMove ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Testing...
+                  </>
+                ) : (
+                  '🚀 Test Create Organizer'
+                )}
+              </Button>
+              
+              <Button
+                onClick={debugZkLogin}
+                variant="outline"
+                className="w-full"
+              >
+                🔍 Debug zkLogin State
+              </Button>
+              
+              {moveTestResult && (
+                <div className="p-3 bg-muted/50 rounded-lg">
+                  <pre className="text-xs whitespace-pre-wrap font-mono">
+                    {moveTestResult}
+                  </pre>
+                </div>
+              )}
+              
+              <div className="text-xs text-muted-foreground">
+                <p>📝 <strong>Note:</strong> Make sure to:</p>
+                <ul className="list-disc ml-4 mt-1 space-y-1">
+                  <li>Update PACKAGE_ID in src/config/moveConfig.js</li>
+                  <li>Ensure your Move contract is published on Sui</li>
+                </ul>
+              </div>
             </Card.Body>
           </Card>
         </div>

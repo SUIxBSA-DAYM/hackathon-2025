@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import zkLoginService from '../services/zklogin';
+import moveService from '../services/moveService';
+import { MOVE_CONFIG } from '../config/moveConfig';
 
 const AuthContext = createContext();
 
@@ -137,6 +139,94 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
+   * Create an organizer on-chain using Move contract
+   * This is the simplest Move function to test integration
+   */
+  const createOrganizerOnChain = async (organizerUrl = "https://myorganizer.com") => {
+    if (!user) {
+      throw new Error('User must be authenticated to create organizer');
+    }
+
+    try {
+      setIsLoading(true);
+      
+      // Check if this is a mock user (for development testing)
+      if (user.id && user.id.includes('mock')) {
+        console.log('🧪 Mock user detected - simulating Move contract call');
+        
+        // Simulate successful organizer creation for mock users
+        const mockResult = {
+          digest: '0xmock-transaction-hash-' + Date.now(),
+          effects: { 
+            status: { status: 'success' },
+            gasUsed: { computationCost: '1000000', storageCost: '2000000' }
+          },
+          objectChanges: [
+            { 
+              type: 'created', 
+              objectId: '0xmock-organizer-object-' + Date.now(),
+              objectType: `${MOVE_CONFIG.PACKAGE_ID}::${MOVE_CONFIG.MODULE_NAME}::Organizer`
+            }
+          ],
+          timestamp: new Date().toISOString(),
+          checkpoint: Math.floor(Math.random() * 1000000)
+        };
+        
+        console.log('✅ Mock organizer created successfully!', mockResult);
+        return mockResult;
+      }
+      
+      // Real zkLogin user flow
+      const zkWallet = zkLoginService.getWallet();
+      if (!zkWallet) {
+        // Additional debugging info
+        const isAuth = zkLoginService.isAuthenticated();
+        const hasJWT = !!zkLoginService.jwt;
+        const hasAddress = !!zkLoginService.zkLoginUserAddress;
+        const hasKeyPair = !!zkLoginService.ephemeralKeyPair;
+        
+        console.error('zkLogin wallet debug info:', {
+          isAuthenticated: isAuth,
+          hasJWT,
+          hasAddress,
+          hasKeyPair,
+          userAddress: zkLoginService.zkLoginUserAddress
+        });
+        
+        throw new Error('zkLogin wallet not available. Please re-authenticate with Google.');
+      }
+
+      console.log('Creating organizer on-chain for user:', user.email);
+      
+      // Call Move contract function
+      const result = await moveService.createOrganizer(zkWallet, organizerUrl);
+      
+      console.log('✅ Organizer created successfully!', result);
+      return result;
+      
+    } catch (error) {
+      console.error('Failed to create organizer on-chain:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Test Move package connectivity
+   */
+  const testMovePackage = async () => {
+    try {
+      const exists = await moveService.checkPackageExists();
+      console.log('Move package exists:', exists);
+      return exists;
+    } catch (error) {
+      console.error('Move package test failed:', error);
+      return false;
+    }
+  };
+
+  /**
    * Refresh user balance
    */
   const refreshBalance = async (address = user?.address) => {
@@ -158,14 +248,49 @@ export const AuthProvider = ({ children }) => {
    * Get zkLogin service instance for transaction signing
    */
   const getZkLoginService = () => {
-    if (!zkLoginService.isAuthenticated()) {
-      throw new Error('User not authenticated');
+    // For mock users, return a mock service
+    if (user && user.id && user.id.includes('mock')) {
+      console.log('🧪 Returning mock zkLogin service for testing');
+      return {
+        isAuthenticated: () => true,
+        getWallet: () => ({
+          address: user.address,
+          signAndExecuteTransaction: async (txBlock) => {
+            // Mock transaction execution
+            return {
+              digest: '0xmock-tx-' + Date.now(),
+              effects: { status: { status: 'success' } }
+            };
+          }
+        })
+      };
     }
+
+    // Real zkLogin service
+    if (!zkLoginService.isAuthenticated()) {
+      const debugInfo = {
+        hasJWT: !!zkLoginService.jwt,
+        hasAddress: !!zkLoginService.zkLoginUserAddress,
+        hasKeyPair: !!zkLoginService.ephemeralKeyPair,
+        userExists: !!user
+      };
+      console.error('zkLogin service debug info:', debugInfo);
+      throw new Error('User not authenticated with zkLogin. Please sign in with Google.');
+    }
+    
     return zkLoginService;
   };
 
+  /**
+   * Debug zkLogin state - helpful for troubleshooting
+   */
+  const debugZkLogin = () => {
+    console.log('🐛 Debug zkLogin called from AuthContext');
+    zkLoginService.debugLocalStorage();
+  };
+
   const value = {
-    // User state
+    // State
     user,
     balance,
     isLoading,
@@ -177,9 +302,14 @@ export const AuthProvider = ({ children }) => {
     disconnectWallet,
     mockLogin, // Keep for development/testing
     
+    // Move contract functions
+    createOrganizerOnChain,
+    testMovePackage,
+    
     // Utility functions
     refreshBalance,
-    getZkLoginService
+    getZkLoginService,
+    debugZkLogin // Add debug function
   };
 
   return (
@@ -196,3 +326,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthContext;
