@@ -14,6 +14,8 @@ module tickets_package::tickets_package {
     use sui::event;
     use sui::clock::{Clock, timestamp_ms};
     use sui::sui::SUI ;
+    use tickets_package::user::Organizer;
+
     // --- Errors ---
     /// Error thrown when the lengths of the places and capacities vectors do not match.
     const EPlaceNameCapacityLengthMismatch: u64 = 400;
@@ -39,12 +41,6 @@ module tickets_package::tickets_package {
         price_sui: u64,
         capacity: u64,
         name: String
-    }
-
-    public struct Organizer has key {
-        id: UID,
-        url: String,
-        events: vector<address>
     }
 
     public struct Nft has key, store {
@@ -81,14 +77,6 @@ module tickets_package::tickets_package {
 
     public fun total_capacity(event: &Event): u64 {
         event.inventory.total_capacity
-    }
-
-    public fun create_organizer(url: String, ctx: &mut TxContext): Organizer {
-        Organizer {
-            id: object::new(ctx),
-            url,
-            events: vector::empty<address>()
-        }
     }
 
     /// Create a new nft ticket, only the organization owner should call this function
@@ -154,7 +142,7 @@ module tickets_package::tickets_package {
             category,
             inventory
         };
-        vector::push_back(&mut organizer.events, object::uid_to_address(&event.id));
+        organizer.add_event(object::uid_to_address(&event.id));
         event
     }
 
