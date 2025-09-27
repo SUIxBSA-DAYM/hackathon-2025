@@ -10,7 +10,6 @@ module tickets_package::tickets_package;
 module tickets_package::tickets_package {
     use std::string::{Self, String};
     use sui::table::{Self, Table};
-    use sui::test_scenario as ts;
     use tickets_package::user::Organizer;
 
     // --- Errors ---
@@ -56,6 +55,22 @@ module tickets_package::tickets_package {
         creator: address,
         // The name of the NFT
         name: String,
+    }
+
+    public fun name(event: &Event): &String {
+        &event.name
+    }
+
+    public fun total_capacity(event: &Event): u64 {
+        event.inventory.total_capacity
+    }
+
+    public fun create_organizer(url: String, ctx: &mut TxContext): Organizer {
+        Organizer {
+            id: object::new(ctx),
+            url,
+            events: vector::empty<address>()
+        }
     }
 
     /// Create a new nft ticket, only the organization owner should call this function
@@ -122,37 +137,11 @@ module tickets_package::tickets_package {
         event
     }
 
-    #[test]
-    fun test_create_event_success() {
-        let owner = @0x1;
-        let mut ts = ts::begin(owner);
-        let ctx = ts.ctx();
-        let places = vector[string::utf8(b"Main Hall"), string::utf8(b"Side Room")];
-        let capacities = vector[2, 1];
-        let mut organizer = Organizer {
-            id: object::new(ctx),
-            url: string::utf8(b"https://example.com"),
-            events: vector::empty<address>()
-        };
-        let event = create_event(
-            string::utf8(b"Dev Meetup"),
-            string::utf8(b"37.7749,-122.4194"), // Example coordinates
-            string::utf8(b"2024-07-01T18:00:00Z"),
-            string::utf8(b"Tech"),
-            places,
-            capacities,
-            &mut organizer,
-            ctx
-        );
-        assert!(event.name == string::utf8(b"Dev Meetup"), 1);
-        assert!(event.inventory.total_capacity == 3, 0);
-        ts.return_to_sender(event);
-        ts.return_to_sender(organizer);
-        ts.end();
-        // Optionally, check more properties...
-    }
-
-
 }
+
+
+
+
+
 
 
