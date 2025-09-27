@@ -33,6 +33,7 @@ module tickets_package::tickets_package_tests {
         let ctx = ts.ctx();
         let places = vector[string::utf8(b"Main Hall"), string::utf8(b"Side Room")];
         let capacities = vector[2, 1];
+        let prices = vector[2, 3];
         let mut organizer = create_organizer(string::utf8(b"https//example.com"),  vector[@0, @1]: vector<address>, string::utf8(b"qenhrgdt"), ctx); 
         let event = create_event(
             string::utf8(b"Dev Meetup"),
@@ -40,6 +41,7 @@ module tickets_package::tickets_package_tests {
             string::utf8(b"2024-07-01T18:00:00Z"),
             string::utf8(b"Tech"),
             places,
+            prices,
             capacities,
             &mut organizer,
             ctx
@@ -63,6 +65,7 @@ module tickets_package::tickets_package_tests {
         // Define event details with mismatched vector lengths
         let places = vector[string::utf8(b"Zone 1")]; // Length 1
         let capacities = vector[10, 20];   // Length 2
+        let prices = vector[4, 6];
         let mut organizer = create_organizer(string::utf8(b"https://example.com"), ctx);
 
         // Execute the transaction
@@ -72,6 +75,7 @@ module tickets_package::tickets_package_tests {
             string::utf8(b"2025-12-01T12:00:00Z"),
             string::utf8(b"Test"),
             places,
+            prices,
             capacities, // This mismatch should cause an abort
             &mut organizer,
             ctx
