@@ -38,13 +38,6 @@ module tickets_package::tickets_package {
         name: String
     }
 
-    public struct Organizer has key {
-        id: UID,
-        url: String,
-        address: address,
-        events: vector<address>
-    }
-
     public struct Nft has key, store {
         id: UID,
         event: address,
