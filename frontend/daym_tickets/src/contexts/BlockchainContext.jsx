@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer } from 'react';
+import { createContext, useContext, useReducer, useMemo, useCallback } from 'react';
 import * as blockchainService from '../services/blockchain';
 import { mockEvents } from '../data/mockEvents';
 
@@ -51,7 +51,7 @@ export const BlockchainProvider = ({ children }) => {
   const [state, dispatch] = useReducer(blockchainReducer, initialState);
 
   // Helper function to handle async operations
-  const handleAsyncOperation = async (operation, successAction) => {
+  const handleAsyncOperation = useCallback(async (operation, successAction) => {
     dispatch({ type: 'SET_LOADING', payload: true });
     dispatch({ type: 'CLEAR_ERROR' });
     
@@ -67,19 +67,19 @@ export const BlockchainProvider = ({ children }) => {
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
-  };
+  }, []);
 
   /**
    * Create a new event and mint initial tickets
    * @param {Object} eventData - Event details
    * @returns {Promise<Object>} Created event object
    */
-  const createEvent = async (eventData) => {
+  const createEvent = useCallback(async (eventData) => {
     return handleAsyncOperation(
       () => blockchainService.createEventMock(eventData),
       (result) => ({ type: 'ADD_EVENT', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Mint ticket NFT for an event
@@ -88,12 +88,12 @@ export const BlockchainProvider = ({ children }) => {
    * @param {Object} metadata - Ticket metadata
    * @returns {Promise<Object>} Minted ticket object
    */
-  const mintTicket = async (eventId, ownerAddress, metadata = {}) => {
+  const mintTicket = useCallback(async (eventId, ownerAddress, metadata = {}) => {
     return handleAsyncOperation(
       () => blockchainService.mintTicketMock(eventId, ownerAddress, metadata),
       (result) => ({ type: 'ADD_TICKET', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Transfer ticket to another address
@@ -101,12 +101,12 @@ export const BlockchainProvider = ({ children }) => {
    * @param {string} toAddress - Recipient address
    * @returns {Promise<Object>} Updated ticket object
    */
-  const transferTicket = async (tokenId, toAddress) => {
+  const transferTicket = useCallback(async (tokenId, toAddress) => {
     return handleAsyncOperation(
       () => blockchainService.transferTicketMock(tokenId, toAddress),
       (result) => ({ type: 'UPDATE_TICKET', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Verify ticket ownership for a specific address
@@ -114,46 +114,46 @@ export const BlockchainProvider = ({ children }) => {
    * @param {string} tokenId - Ticket token ID
    * @returns {Promise<boolean>} Ownership verification result
    */
-  const verifyOwnership = async (address, tokenId) => {
+  const verifyOwnership = useCallback(async (address, tokenId) => {
     return handleAsyncOperation(
       () => blockchainService.verifyOwnershipMock(address, tokenId)
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Mark ticket as used (for check-in)
    * @param {string} tokenId - Ticket token ID
    * @returns {Promise<Object>} Updated ticket object
    */
-  const markTicketUsed = async (tokenId) => {
+  const markTicketUsed = useCallback(async (tokenId) => {
     return handleAsyncOperation(
       () => blockchainService.markTicketUsedMock(tokenId),
       (result) => ({ type: 'UPDATE_TICKET', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Get all events from blockchain
    * @returns {Promise<Array>} Array of events
    */
-  const loadEvents = async () => {
+  const loadEvents = useCallback(async () => {
     return handleAsyncOperation(
       () => blockchainService.getEventsMock(),
       (result) => ({ type: 'SET_EVENTS', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Get tickets owned by an address
    * @param {string} address - Owner address
    * @returns {Promise<Array>} Array of tickets
    */
-  const loadUserTickets = async (address) => {
+  const loadUserTickets = useCallback(async (address) => {
     return handleAsyncOperation(
       () => blockchainService.getUserTicketsMock(address),
       (result) => ({ type: 'SET_TICKETS', payload: result })
     );
-  };
+  }, [handleAsyncOperation]);
 
   /**
    * Verify signature for check-in process
@@ -162,28 +162,32 @@ export const BlockchainProvider = ({ children }) => {
    * @param {string} address - Signer address
    * @returns {Promise<boolean>} Signature verification result
    */
-  const verifySignature = async (message, signature, address) => {
+  const verifySignature = useCallback(async (message, signature, address) => {
     return handleAsyncOperation(
       () => blockchainService.verifySignatureMock(message, signature, address)
     );
-  };
+  }, [handleAsyncOperation]);
 
   // Utility functions
-  const getEventById = (eventId) => {
+  const getEventById = useCallback((eventId) => {
     return state.events.find(event => event.id === eventId);
-  };
+  }, [state.events]);
 
-  const getUserTickets = (userAddress) => {
+  const getUserTickets = useCallback((userAddress) => {
     return state.tickets.filter(ticket => 
       ticket.owner.toLowerCase() === userAddress.toLowerCase()
     );
-  };
+  }, [state.tickets]);
 
-  const getTicketById = (tokenId) => {
+  const getTicketById = useCallback((tokenId) => {
     return state.tickets.find(ticket => ticket.id === tokenId);
-  };
+  }, [state.tickets]);
 
-  const value = {
+  const clearError = useCallback(() => {
+    dispatch({ type: 'CLEAR_ERROR' });
+  }, []);
+
+  const value = useMemo(() => ({
     ...state,
     // Actions
     createEvent,
@@ -198,8 +202,22 @@ export const BlockchainProvider = ({ children }) => {
     getEventById,
     getUserTickets,
     getTicketById,
-    clearError: () => dispatch({ type: 'CLEAR_ERROR' })
-  };
+    clearError
+  }), [
+    state,
+    createEvent,
+    mintTicket,
+    transferTicket,
+    verifyOwnership,
+    markTicketUsed,
+    loadEvents,
+    loadUserTickets,
+    verifySignature,
+    getEventById,
+    getUserTickets,
+    getTicketById,
+    clearError
+  ]);
 
   return (
     <BlockchainContext.Provider value={value}>

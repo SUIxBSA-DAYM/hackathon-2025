@@ -12,13 +12,15 @@ import Card from '../components/ui/Card';
  * Allows users to connect their Slush wallet
  */
 const SignIn = () => {
-  const { user, connectWallet, mockLogin, isLoading, error } = useAuth();
+  const { user, connectWallet, mockLogin, isLoading, isInitializing } = useAuth();
   const { isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [connectionError, setConnectionError] = useState('');
   const [showMockOptions, setShowMockOptions] = useState(true); // Show mock options for testing
+  const [selectedRole, setSelectedRole] = useState('participant'); // Default role
+  const [showRoleSelection, setShowRoleSelection] = useState(false);
 
   // Handle universal links on mount
   useEffect(() => {
@@ -44,6 +46,28 @@ const SignIn = () => {
     if (eventId) {
       // Store the intended destination for after login
       localStorage.setItem('pending_navigation', `/event/${eventId}`);
+    }
+  };
+
+  /**
+   * Handle zkLogin connection with role selection
+   */
+  const handleZkLoginConnect = async () => {
+    setConnectionError('');
+    
+    try {
+      // Store selected role for use after authentication
+      localStorage.setItem('selected_role', selectedRole);
+      
+      await connectWallet();
+      // Check for pending navigation from universal links
+      const pendingNav = localStorage.getItem('pending_navigation');
+      if (pendingNav) {
+        localStorage.removeItem('pending_navigation');
+        navigate(pendingNav, { replace: true });
+      }
+    } catch (err) {
+      setConnectionError(err.message || 'Failed to connect with zkLogin');
     }
   };
 
@@ -107,14 +131,62 @@ const SignIn = () => {
         {/* Connection Card */}
         <Card glass={true} className="shadow-2xl">
           <Card.Header className="text-center pb-6">
-            <Card.Title className="text-2xl mb-4">Sign In with Slush Wallet</Card.Title>
+            <Card.Title className="text-2xl mb-4">Sign In to DAYM Tickets</Card.Title>
             <Card.Description className="text-slate-600 dark:text-slate-300">
-              Connect your Slush wallet to access your tickets and create events
+              Connect with Google using zkLogin or your Slush wallet to access blockchain-powered event tickets
             </Card.Description>
           </Card.Header>
 
           <Card.Body className="space-y-6">
-            {/* Mock Login Options for Testing */}
+                        {/* Role Selection */}
+            <div className="space-y-4 mb-6">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  Choose your role
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Select how you'd like to use the platform
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setSelectedRole('participant')}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    selectedRole === 'participant'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🎫</div>
+                    <div className="font-semibold text-sm">Participant</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Buy tickets & attend events
+                    </div>
+                  </div>
+                </button>
+                
+                <button
+                  onClick={() => setSelectedRole('organizer')}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    selectedRole === 'organizer'
+                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-400'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                  }`}
+                >
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🎪</div>
+                    <div className="font-semibold text-sm">Organizer</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Create & manage events
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Mock Login Options */}
             {showMockOptions && (
               <div className="space-y-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -132,18 +204,24 @@ const SignIn = () => {
                   <Button
                     onClick={() => handleMockLogin('organizer')}
                     disabled={isLoading}
-                    variant="outline"
+                    variant={selectedRole === 'organizer' ? 'primary' : 'outline'}
                     size="sm"
-                    className="border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-900/20"
+                    className={selectedRole === 'organizer' 
+                      ? '' 
+                      : 'border-purple-300 hover:bg-purple-50 dark:border-purple-600 dark:hover:bg-purple-900/20'
+                    }
                   >
                     {isLoading ? '⏳' : '🎪'} Organizer
                   </Button>
                   <Button
                     onClick={() => handleMockLogin('participant')}
                     disabled={isLoading}
-                    variant="outline"
+                    variant={selectedRole === 'participant' ? 'primary' : 'outline'}
                     size="sm"
-                    className="border-green-300 hover:bg-green-50 dark:border-green-600 dark:hover:bg-green-900/20"
+                    className={selectedRole === 'participant' 
+                      ? '' 
+                      : 'border-blue-300 hover:bg-blue-50 dark:border-blue-600 dark:hover:bg-blue-900/20'
+                    }
                   >
                     {isLoading ? '⏳' : '🎫'} Participant
                   </Button>
@@ -155,30 +233,54 @@ const SignIn = () => {
             )}
 
             {/* Real Connection Button */}
-            <Button
-              onClick={handleConnect}
-              disabled={isLoading}
-              className="w-full"
-              size="lg"
-            >
-              {isLoading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Connecting...
-                </>
-              ) : (
-                <>
-                  <span className="mr-2">🦄</span>
-                  Connect Slush Wallet
-                </>
-              )}
-            </Button>
+            <div className="space-y-4">
+              {/* zkLogin Google Sign In */}
+              <Button
+                onClick={handleZkLoginConnect}
+                disabled={isLoading || isInitializing}
+                className="w-full"
+                size="lg"
+              >
+                {isInitializing ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Initializing zkLogin...
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-2">🔐</span>
+                    Sign in with Google (zkLogin)
+                  </>
+                )}
+              </Button>
+              
+              {/* Original Slush Wallet Button */}
+              <Button
+                onClick={handleConnect}
+                disabled={isLoading || isInitializing}
+                variant="outline"
+                className="w-full"
+                size="lg"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-2">🦄</span>
+                    Connect Slush Wallet
+                  </>
+                )}
+              </Button>
+            </div>
 
             {/* Error Display */}
-            {(error || connectionError) && (
+            {connectionError && (
               <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
                 <p className="text-red-500 text-sm">
-                  {error || connectionError}
+                  {connectionError}
                 </p>
               </div>
             )}

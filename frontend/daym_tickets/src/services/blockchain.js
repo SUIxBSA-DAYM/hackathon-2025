@@ -264,7 +264,7 @@ export const markTicketUsedMock = async (tokenId) => {
  */
 export const getEventsMock = async () => {
   await new Promise(resolve => setTimeout(resolve, 400));
-  return [...mockEvents];
+  return [...serviceEvents];
   
   /* Real Sui Move implementation:
   const events = await suiClient.getOwnedObjects({
@@ -339,7 +339,7 @@ export const verifySignatureMock = async (message, signature, address) => {
  */
 export const getEventByIdMock = async (eventId) => {
   await new Promise(resolve => setTimeout(resolve, 200));
-  return mockEvents.find(event => event.id === eventId) || null;
+  return serviceEvents.find(event => event.id === eventId) || null;
 };
 
 /**
@@ -352,7 +352,7 @@ export const getTicketByIdMock = async (tokenId) => {
 
 // Utility functions for demo/testing
 export const addMockEvent = (eventData) => {
-  mockEvents.push(eventData);
+  serviceEvents.push(eventData);
 };
 
 export const addMockTicket = (ticketData) => {
@@ -360,40 +360,14 @@ export const addMockTicket = (ticketData) => {
 };
 
 export const clearMockData = () => {
-  mockEvents = [];
+  serviceEvents.length = 0; // Clear the array
   mockTickets = [];
 };
 
 export const resetMockData = () => {
   // Reset to initial state
-  mockEvents = [
-    {
-      id: '1',
-      title: 'Electronic Music Festival',
-      description: 'A night of electronic beats with top DJs',
-      date: '2024-03-15T20:00:00Z',
-      location: 'Berlin Arena',
-      totalTickets: 1000,
-      availableTickets: 850,
-      price: 45,
-      imageUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400',
-      creator: '0x123...abc',
-      created: '2024-01-15T10:00:00Z'
-    },
-    {
-      id: '2',
-      title: 'Rock Concert 2024', 
-      description: 'Epic rock performance with legendary bands',
-      date: '2026-04-20T19:30:00Z',
-      location: 'Madison Square Garden',
-      totalTickets: 2000,
-      availableTickets: 1200,
-      price: 75,
-      imageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=400',
-      creator: '0x456...def',
-      created: '2024-01-20T15:00:00Z'
-    }
-  ];
+  serviceEvents.length = 0; // Clear existing events
+  serviceEvents.push(...mockEvents); // Add fresh copy of mock events
   
   mockTickets = [
     {

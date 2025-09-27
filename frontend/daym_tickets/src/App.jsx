@@ -8,6 +8,7 @@ import { addUniversalLinkMeta } from './utils/universalLinks';
 // Import page components
 import Home from './pages/Home';
 import SignIn from './pages/SignIn';
+import AuthCallback from './pages/AuthCallback';
 import Profile from './pages/Profile';
 import CreateEvent from './pages/CreateEvent';
 import EventRegister from './pages/EventRegister';
@@ -41,6 +42,7 @@ function App() {
                   {/* Public routes */}
                   <Route path="/" element={<Home />} />
                   <Route path="/signin" element={<SignIn />} />
+                  <Route path="/auth/callback" element={<AuthCallback />} />
                   
                   {/* Event routes */}
                   <Route path="/event/:id" element={<EventRegister />} />
