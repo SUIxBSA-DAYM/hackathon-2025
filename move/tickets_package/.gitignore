@@ -2,3 +2,4 @@ build/*
 .trace
 .coverage*
 sui
+Move.lock
