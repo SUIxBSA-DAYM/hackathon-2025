@@ -11,6 +11,7 @@ module tickets_package::tickets_package {
     use std::string::{Self, String};
     use sui::table::{Self, Table};
     use sui::test_scenario as ts;
+    use tickets_package::user::Organizer;
 
     // --- Errors ---
     /// Error thrown when the lengths of the places and capacities vectors do not match.
@@ -117,7 +118,7 @@ module tickets_package::tickets_package {
             category,
             inventory
         };
-        vector::push_back(&mut organizer.events, object::uid_to_address(&event.id));
+        organizer.add_event(object::uid_to_address(&event.id));
         event
     }
 
