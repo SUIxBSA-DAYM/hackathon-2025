@@ -65,14 +65,6 @@ module tickets_package::tickets_package {
         event.inventory.total_capacity
     }
 
-    public fun create_organizer(url: String, ctx: &mut TxContext): Organizer {
-        Organizer {
-            id: object::new(ctx),
-            url,
-            events: vector::empty<address>()
-        }
-    }
-
     /// Create a new nft ticket, only the organization owner should call this function
     /// TODO: add checks to ensure only the organizer can create an NFT for their event
     public fun create_nft(name: String, event: address, creation_date: String, owner: address, ctx: &mut TxContext): Nft {

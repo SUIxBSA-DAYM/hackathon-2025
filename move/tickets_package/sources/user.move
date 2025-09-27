@@ -1,11 +1,9 @@
-
 module tickets_package::user{
-    use std::string::String;
     //use tickets_package::tickets_package::Nft;
-    
+    use std::string::String;
 
     /// Crée un user
-    public struct User has store {
+    public struct User has store, drop {
         role: u8, // 0 = "Client" or 1 = "Organizer"
         username: String
     }
@@ -13,56 +11,53 @@ module tickets_package::user{
     /// Définition d'un client
     public struct Client has key {
         id: UID,
-        user: User,
         username: String,
         is_active: bool,
         //history: vector<Nft> // Historique des tickets achetés
-    }
+    } 
 
     public struct Organizer has key {
         id: UID,
-        url: String,
-        user: User,
         username: String,
+        url: String,
         events: vector<address>, // Liste des événements organisés
     }
 
         /// Créer un nouveau user
-    public fun create_user(ctx: &mut TxContext, username: String, url: String ) 
+    public fun create_user(username: String, url: String, ctx: &mut TxContext) 
     {
      let user = User {
         role: 0, // 0 pour Client
-        username,
+        username: username,
       };
       let client = Client {
-            user,
             username: user.username,
             id: object::new(ctx),
             is_active: true,
        };
-       move_to(account, client);
+       transfer::share_object(client);
     }
 
     /// Créer un nouvel organisateur
-    public fun create_organizer( ctx: &mut TxContext, url: String, events: vector<address> )
+    public fun create_organizer( url: String, events: vector<address>, username: String, ctx: &mut TxContext )
     {
         let user = User {
             role: 1, // 1 pour Organizer
-            username,
+            username: username,
         };
         let organizer = Organizer {
             id: object::new(ctx),
-            url: String::utf8( " " ),
+            url: url,
             events: vector::empty<address>(),
-            user,
             username: user.username,
-            };
-        move_to(account, organizer);
+        };
+        transfer::share_object(organizer); // Permet de partager l'objet Organizer
+        // recall avec &mut organizer
     }
 
 
     /// Mettre à jour les informations du client
-    public fun update_client(client: &mut Client, username: vector<String>, email: vector<String>, phone: vector<String>) {
+    public fun update_user(client: &mut User, username: String) {
         client.username = username;
     }
 
@@ -77,10 +72,8 @@ module tickets_package::user{
     }
     
     // Vérifier si le client est actif
-    public fun is_client_active(client: &Client): bool {
-        client.is_active
-    
-
+    public fun is_client_active(client: &Client) {
+        client.is_active && true;
     }
 
     public fun add_event(organizer: &mut Organizer, event: address) {

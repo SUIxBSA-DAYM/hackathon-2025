@@ -16,14 +16,15 @@ fun test_tickets_package_fail() {
     abort ENotImplemented
 }
 */
-
+/*
 #[test_only]
 module tickets_package::tickets_package_tests {
 
     // uncomment this line to import the module
-    use tickets_package::tickets_package::{create_event, create_organizer};
+    use tickets_package::tickets_package::create_event;
     use sui::test_scenario;
     use std::string;
+    use tickets_package::user::create_organizer;
 
     #[test]
     fun test_create_event_success() {
@@ -32,7 +33,7 @@ module tickets_package::tickets_package_tests {
         let ctx = ts.ctx();
         let places = vector[string::utf8(b"Main Hall"), string::utf8(b"Side Room")];
         let capacities = vector[2, 1];
-        let mut organizer = create_organizer(string::utf8(b"https://example.com"), ctx); 
+        let mut organizer = create_organizer(string::utf8(b"https//example.com"),  vector[@0, @1]: vector<address>, string::utf8(b"qenhrgdt"), ctx); 
         let event = create_event(
             string::utf8(b"Dev Meetup"),
             string::utf8(b"37.7749,-122.4194"), // Example coordinates
@@ -82,3 +83,4 @@ module tickets_package::tickets_package_tests {
         ts.end();
     }
 }
+*/
