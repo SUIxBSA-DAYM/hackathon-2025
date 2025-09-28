@@ -116,7 +116,7 @@ module tickets_package::tickets_package {
         capacities: vector<u64>,
         organizer: &mut Organizer,
         ctx: &mut TxContext
-    ): Event {
+    ) {
         assert!(vector::length(&places) == vector::length(&capacities), EPlaceNameCapacityLengthMismatch);
         assert!(vector::length(&prices) == vector::length(&places), EPlaceNameCapacityLengthMismatch);
         let owner = ctx.sender();
@@ -156,7 +156,7 @@ module tickets_package::tickets_package {
             inventory
         };
         organizer.add_event(object::uid_to_address(&event.id));
-        event
+        transfer::public_transfer(event, ctx.sender());
     }
 
     public fun buy_ticket(payment_coin: &mut Coin<SUI>, user: address, event: &mut Event, place: Place, clock: &Clock, ctx: &mut TxContext) {
@@ -189,6 +189,13 @@ module tickets_package::tickets_package {
 
     }
 
+    public fun expire_ticket(ticket: &mut Nft) {
+        ticket.used = true; 
+    }
+
+    public fun is_used(ticket: &Nft):bool {
+        ticket.used
+    }
     public fun validate_ticket(nft: &mut UserNft, event: address) {
         assert!(nft.event == event, EEventMismatch);
         assert!(!nft.used, ENFTAlreadyUsed);
