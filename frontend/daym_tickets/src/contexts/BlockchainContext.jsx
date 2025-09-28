@@ -90,7 +90,7 @@ export const BlockchainProvider = ({ children }) => {
    */
   const mintTicket = useCallback(async (eventId, ownerAddress, metadata = {}) => {
     return handleAsyncOperation(
-      () => blockchainService.mintTicketMock(eventId, ownerAddress, metadata),
+      () => blockchainService.mintTicket(eventId, ownerAddress, metadata),
       (result) => ({ type: 'ADD_TICKET', payload: result })
     );
   }, [handleAsyncOperation]);

@@ -48,9 +48,9 @@ export const ThemeProvider = ({ children }) => {
       }
     },
     gradients: {
-      primary: 'linear-gradient(135deg, #5a6dff 0%, #3ec1ff 100%)',
-      accent: 'linear-gradient(135deg, #2ee6a1 0%, #5a6dff 100%)',
-      purpleBlue: 'linear-gradient(135deg, #9f7aea 0%, #5a6dff 50%, #3ec1ff 100%)',
+      primary: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      accent: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      purpleBlue: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
     }
   };
 

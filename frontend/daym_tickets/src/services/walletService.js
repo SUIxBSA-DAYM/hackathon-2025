@@ -472,12 +472,13 @@ export class TransactionBuilder {
   registerEventTransaction(eventId, participantName, participantEmail) {
     const transaction = new Transaction();
     
+    // Create client/participant using the correct Move function signature
+    // create_client(username: String, url: String, ctx: &mut TxContext)
     transaction.moveCall({
-      target: `${this.packageId}::tickets_package::register_participant`,
+      target: `${this.packageId}::user::create_client`,
       arguments: [
-        transaction.pure.string(eventId),
-        transaction.pure.string(participantName),
-        transaction.pure.string(participantEmail),
+        transaction.pure.string(participantName), // username
+        transaction.pure.string(participantEmail || ''), // url (using email as placeholder)
       ],
     });
 

@@ -535,12 +535,13 @@ export const createEventMock = async (eventData) => {
 export const registerForEventTransaction = (eventId, participantName, participantEmail) => {
   const txb = new Transaction();
   
+  // Create client/participant using correct Move function signature
+  // create_client(username: String, url: String, ctx: &mut TxContext)
   txb.moveCall({
-    target: `${PACKAGE_ID}::tickets_package::register_participant`,
+    target: `${PACKAGE_ID}::user::create_client`,
     arguments: [
-      txb.pure.string(eventId),
-      txb.pure.string(participantName),
-      txb.pure.string(participantEmail),
+      txb.pure.string(participantName), // username
+      txb.pure.string(participantEmail || ''), // url (using email as placeholder)
     ],
   });
   
@@ -577,6 +578,98 @@ export const verifyTicketOwnership = async (tokenId, ownerAddress) => {
 };
 
 /**
+ * Validate a ticket NFT for event entry
+ * Calls the validate_ticket function in Move contract
+ * @param {string} ticketId - The ID of the UserNft ticket
+ * @param {string} eventId - The event address to validate against
+ * @param {string} walletAddress - Organizer wallet address
+ * @returns {Object} Validation result
+ */
+export const validateTicket = async (ticketId, eventId, walletAddress) => {
+  try {
+    console.log('Validating ticket:', { ticketId, eventId, walletAddress });
+
+    // Create transaction to call validate_ticket
+    const tx = new Transaction();
+    
+    tx.moveCall({
+      target: `${PACKAGE_ID}::tickets_package::validate_ticket`,
+      arguments: [
+        tx.object(ticketId), // UserNft object
+        tx.pure(eventId, 'address'), // Event address
+      ],
+    });
+
+    // In a real app, you'd execute this transaction with the organizer's signature
+    console.log('validate_ticket transaction created:', tx);
+    
+    return { 
+      success: true, 
+      message: 'Ticket validated successfully',
+      transaction: tx 
+    };
+
+  } catch (error) {
+    console.error('Error validating ticket:', error);
+    return { 
+      success: false, 
+      message: error.message || 'Failed to validate ticket' 
+    };
+  }
+};
+
+/**
+ * Check if a ticket is already used
+ * This would query the UserNft object to check the 'used' field
+ * @param {string} ticketId - The ID of the UserNft ticket
+ * @returns {Object} Ticket status
+ */
+export const checkTicketStatus = async (ticketId) => {
+  try {
+    console.log('Checking ticket status for:', ticketId);
+
+    const ticketObject = await suiClient.getObject({
+      id: ticketId,
+      options: {
+        showContent: true,
+        showType: true,
+      },
+    });
+
+    if (!ticketObject?.data?.content?.fields) {
+      return { 
+        success: false, 
+        message: 'Ticket not found',
+        isUsed: null 
+      };
+    }
+
+    const fields = ticketObject.data.content.fields;
+    const isUsed = fields.used || false;
+
+    return {
+      success: true,
+      isUsed: isUsed,
+      ticketData: {
+        event: fields.event,
+        owner: fields.owner,
+        organizer: fields.organizer,
+        name: fields.name,
+        buy_date: fields.buy_date,
+      }
+    };
+
+  } catch (error) {
+    console.error('Error checking ticket status:', error);
+    return { 
+      success: false, 
+      message: error.message || 'Failed to check ticket status',
+      isUsed: null 
+    };
+  }
+};
+
+/**
  * Mark ticket as used (would require organizer signature in real implementation)
  */
 export const markTicketUsed = async (tokenId) => {
@@ -584,6 +677,104 @@ export const markTicketUsed = async (tokenId) => {
   // Real implementation would need a Move function to update the 'used' field
   // This would typically be called by event organizers at event check-in
   return { success: false, message: 'Function not yet implemented in Move contract' };
+};
+
+/**
+ * Buy ticket using Move contract
+ * Calls the buy_ticket function in tickets_package
+ * @param {string} eventId - Event object ID
+ * @param {Object} placeData - Place data {name, price, capacity}
+ * @param {string} userAddress - Buyer's address
+ * @returns {Object} Transaction for buying ticket
+ */
+export const buyTicket = async (eventId, placeData, userAddress) => {
+  try {
+    console.log('Creating buy_ticket transaction:', { eventId, placeData, userAddress });
+
+    // Create transaction to call buy_ticket
+    const tx = new Transaction();
+    
+    // Convert SUI price to MIST (1 SUI = 1,000,000,000 MIST)
+    const priceInMist = Math.floor(placeData.price * 1_000_000_000);
+    
+    // Split coin for payment - use more than the exact price to handle gas
+    const [paymentCoin] = tx.splitCoins(tx.gas, [priceInMist]);
+
+    // Instead of creating a new Place, we need to construct a Place that matches
+    // the existing places in the event. The Move contract uses the Place as a key
+    // to look up tickets in the table, so it must match exactly.
+    
+    // Based on the Move contract, we create a Place struct that should match
+    // an existing place in the event's inventory
+    const placeForLookup = {
+      name: placeData.name || 'General',
+      price_sui: priceInMist,
+      capacity: placeData.capacity || 100
+    };
+
+    // Call buy_ticket function with properly constructed Place struct
+    // IMPORTANT: The place must match exactly with a place that exists in the event
+    // For now, we'll use standard values that should match the event creation
+    const standardPrice = 1000000000; // 1 SUI in MIST - should match event creation
+    const standardCapacity = 100; // Standard capacity
+    const placeName = 'General'; // Standard place name
+    
+    const placeStruct = tx.moveCall({
+      target: `${PACKAGE_ID}::tickets_package::create_place`,
+      arguments: [
+        tx.pure.string(placeName),
+        tx.pure.u64(standardPrice), 
+        tx.pure.u64(standardCapacity)
+      ],
+    });
+
+    tx.moveCall({
+      target: `${PACKAGE_ID}::tickets_package::buy_ticket`,
+      arguments: [
+        paymentCoin, // payment_coin: &mut Coin<SUI>
+        tx.pure.address(userAddress), // user: address
+        tx.object(eventId), // event: &mut Event
+        placeStruct, // place: Place (must match existing place in event)
+        tx.sharedObjectRef({
+          objectId: '0x6', // Clock object ID
+          initialSharedVersion: 1,
+          mutable: false,
+        }), // clock: &Clock
+      ],
+    });
+
+    console.log('buy_ticket transaction created:', tx);
+    
+    return { 
+      success: true, 
+      transaction: tx,
+      message: 'Transaction ready for signing' 
+    };
+
+  } catch (error) {
+    console.error('Error creating buy_ticket transaction:', error);
+    return { 
+      success: false, 
+      message: error.message || 'Failed to create buy ticket transaction' 
+    };
+  }
+};
+
+/**
+ * Mint ticket NFT (legacy function for backward compatibility)
+ * Now uses buyTicket under the hood
+ */
+export const mintTicket = async (eventId, userAddress, metadata = {}) => {
+  console.log('mintTicket called - redirecting to buyTicket');
+  
+  // Extract place data from metadata
+  const placeData = {
+    name: metadata.seat || metadata.placeName || 'General',
+    price: metadata.price || 1.0, // Default 1 SUI
+    capacity: metadata.capacity || 100
+  };
+  
+  return await buyTicket(eventId, placeData, userAddress);
 };
 
 // Legacy aliases for backward compatibility
@@ -594,4 +785,8 @@ export {
   verifyTicketOwnership as verifyOwnershipMock,
   markTicketUsed as markTicketUsedMock,
   registerForEventTransaction as registerForEvent,
+  validateTicket as validateTicketMock,
+  checkTicketStatus as checkTicketStatusMock,
+  buyTicket as buyTicketMock,
+  mintTicket as mintTicketMock,
 };

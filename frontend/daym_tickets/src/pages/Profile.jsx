@@ -504,15 +504,6 @@ const Profile = () => {
                   >
                     🎫 Create Event
                   </Button>
-                  
-                  <Button
-                    onClick={handleTestRegisterForEvent}
-                    disabled={isTestingMove || txPending}
-                    variant="outline"
-                    size="sm"
-                  >
-                    📝 Register for Event
-                  </Button>
                 </div>
               </div>
 
@@ -523,14 +514,6 @@ const Profile = () => {
                   Blockchain Queries
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <Button
-                    onClick={handleTestLoadEvents}
-                    disabled={isTestingMove}
-                    variant="outline"
-                    size="sm"
-                  >
-                    📋 Load All Events
-                  </Button>
                   
                   <Button
                     onClick={handleTestLoadUserTickets}

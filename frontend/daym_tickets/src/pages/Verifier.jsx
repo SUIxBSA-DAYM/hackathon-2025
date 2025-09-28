@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBlockchain } from '../contexts/BlockchainContext';
 import { signMessageWithSlush } from '../services/slush';
+import * as blockchainService from '../services/blockchain';
 
 // Import UI components
 import Button from '../components/ui/Button';
@@ -39,6 +40,72 @@ const Verifier = () => {
   const [verificationResult, setVerificationResult] = useState(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
+  const [eventId, setEventId] = useState('');
+
+  /**
+   * Quick validation using Move contract
+   */
+  const handleQuickValidation = async () => {
+    if (!tokenId.trim() || !eventId.trim()) {
+      setVerificationResult({
+        success: false,
+        error: 'Please provide both ticket ID and event ID'
+      });
+      setShowResultModal(true);
+      return;
+    }
+
+    setIsVerifying(true);
+    
+    try {
+      // First check ticket status
+      const statusResult = await blockchainService.checkTicketStatus(tokenId);
+      
+      if (!statusResult.success) {
+        setVerificationResult({
+          success: false,
+          error: statusResult.message,
+          tokenId
+        });
+        setShowResultModal(true);
+        setIsVerifying(false);
+        return;
+      }
+
+      if (statusResult.isUsed) {
+        setVerificationResult({
+          success: false,
+          error: 'Ticket has already been used',
+          tokenId,
+          ticketData: statusResult.ticketData
+        });
+        setShowResultModal(true);
+        setIsVerifying(false);
+        return;
+      }
+
+      // Validate ticket
+      const validationResult = await blockchainService.validateTicket(tokenId, eventId, user?.address);
+      
+      setVerificationResult({
+        success: validationResult.success,
+        message: validationResult.message,
+        tokenId,
+        eventId,
+        ticketData: statusResult.ticketData,
+        type: 'blockchain'
+      });
+      
+    } catch (error) {
+      setVerificationResult({
+        success: false,
+        error: error.message || 'Validation failed'
+      });
+    } finally {
+      setIsVerifying(false);
+      setShowResultModal(true);
+    }
+  };
 
   // Generate check-in message
   const generateMessage = () => {
@@ -227,6 +294,16 @@ const Verifier = () => {
           <Card.Body>
             <div className="flex items-center justify-center space-x-4">
               <button
+                onClick={() => setVerificationMode('quick')}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  verificationMode === 'quick'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                ⚡ Quick Validation
+              </button>
+              <button
                 onClick={() => setVerificationMode('ownership')}
                 className={`px-4 py-2 rounded-lg transition-colors ${
                   verificationMode === 'ownership'
@@ -249,6 +326,42 @@ const Verifier = () => {
             </div>
           </Card.Body>
         </Card>
+
+        {/* Quick Validation Form */}
+        {verificationMode === 'quick' && (
+          <Card className="mb-6">
+            <Card.Body>
+              <h3 className="text-lg font-semibold mb-4">⚡ Quick Blockchain Validation</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Validate ticket directly using Move contract functions
+              </p>
+              
+              <div className="space-y-4">
+                <Input
+                  label="Ticket ID"
+                  placeholder="0x..."
+                  value={tokenId}
+                  onChange={(e) => setTokenId(e.target.value)}
+                />
+                
+                <Input
+                  label="Event ID"
+                  placeholder="0x..."
+                  value={eventId}
+                  onChange={(e) => setEventId(e.target.value)}
+                />
+                
+                <Button
+                  onClick={handleQuickValidation}
+                  disabled={isVerifying || !tokenId.trim() || !eventId.trim()}
+                  className="w-full"
+                >
+                  {isVerifying ? 'Validating...' : '⚡ Validate Ticket'}
+                </Button>
+              </div>
+            </Card.Body>
+          </Card>
+        )}
 
         {/* Verification Form */}
         <Card>
@@ -453,28 +566,68 @@ const Verifier = () => {
               </div>
 
               {/* Ticket Details */}
-              {verificationResult.success && verificationResult.ticket && (
+              {verificationResult.success && (verificationResult.ticket || verificationResult.ticketData) && (
                 <div className="space-y-3">
                   <h4 className="font-semibold">Ticket Details</h4>
                   <div className="bg-muted/30 p-4 rounded-lg space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Event:</span>
-                      <span>{verificationResult.ticket.metadata.eventTitle}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Venue:</span>
-                      <span>{verificationResult.ticket.metadata.venue}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Seat:</span>
-                      <span>{verificationResult.ticket.seat} • {verificationResult.ticket.tier}</span>
-                    </div>
+                    {verificationResult.ticketData ? (
+                      // Blockchain ticket data
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Event:</span>
+                          <span className="break-all">{shortenId(verificationResult.ticketData.event)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Owner:</span>
+                          <span className="break-all">{shortenId(verificationResult.ticketData.owner)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Organizer:</span>
+                          <span className="break-all">{shortenId(verificationResult.ticketData.organizer)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Ticket Name:</span>
+                          <span>{verificationResult.ticketData.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Purchase Date:</span>
+                          <span>{new Date(parseInt(verificationResult.ticketData.buy_date)).toLocaleDateString()}</span>
+                        </div>
+                      </>
+                    ) : (
+                      // Legacy ticket data
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Event:</span>
+                          <span>{verificationResult.ticket.metadata.eventTitle}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Venue:</span>
+                          <span>{verificationResult.ticket.metadata.venue}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Seat:</span>
+                          <span>{verificationResult.ticket.seat} • {verificationResult.ticket.tier}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Status:</span>
-                      <span className={verificationResult.ticket.isUsed ? 'text-red-500' : 'text-green-500'}>
-                        {verificationResult.ticket.isUsed ? 'Already Used' : 'Valid'}
+                      <span className={verificationResult.ticket?.isUsed ? 'text-red-500' : 'text-green-500'}>
+                        {verificationResult.ticket?.isUsed ? 'Already Used' : 'Valid'}
                       </span>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Blockchain Validation Message */}
+              {verificationResult.type === 'blockchain' && verificationResult.message && (
+                <div className="space-y-3">
+                  <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-lg">
+                    <p className="text-blue-700 dark:text-blue-300 text-sm">
+                      {verificationResult.message}
+                    </p>
                   </div>
                 </div>
               )}

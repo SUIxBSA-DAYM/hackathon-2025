@@ -66,55 +66,72 @@
 }
 
 @layer components {
-  /* Custom gradient backgrounds */
+  /* Custom gradient backgrounds - Modern & Sophisticated */
   .bg-gradient-primary {
-    background: linear-gradient(135deg, rgb(79 70 229) 0%, rgb(139 92 246) 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   }
   
   .bg-gradient-secondary {
-    background: linear-gradient(135deg, rgb(16 185 129) 0%, rgb(59 130 246) 100%);
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   }
   
   .bg-gradient-accent {
-    background: linear-gradient(135deg, rgb(236 72 153) 0%, rgb(239 68 68) 100%);
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
   }
   
   .bg-gradient-success {
-    background: linear-gradient(135deg, rgb(34 197 94) 0%, rgb(16 185 129) 100%);
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
   }
 
-  /* Page background gradients */
+  /* Additional modern gradients */
+  .bg-gradient-aurora {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+  }
+  
+  .bg-gradient-sunset {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  }
+  
+  .bg-gradient-ocean {
+    background: linear-gradient(135deg, #74b9ff 0%, #0984e3 50%, #6c5ce7 100%);
+  }
+  
+  .bg-gradient-forest {
+    background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+  }
+
+  /* Page background gradients - Ultra Modern */
   .bg-page-gradient-blue {
-    background: linear-gradient(135deg, rgb(239 246 255) 0%, rgb(219 234 254) 25%, rgb(191 219 254) 100%);
+    background: linear-gradient(135deg, #f8faff 0%, #e8f4fd 25%, #d3e9fc 50%, #c3dafe 100%);
   }
   
   .bg-page-gradient-purple {
-    background: linear-gradient(135deg, rgb(250 245 255) 0%, rgb(237 233 254) 25%, rgb(221 214 254) 100%);
+    background: linear-gradient(135deg, #fdf8ff 0%, #f3e8ff 25%, #e9d5ff 50%, #d8b4fe 100%);
   }
   
   .bg-page-gradient-green {
-    background: linear-gradient(135deg, rgb(236 253 245) 0%, rgb(209 250 229) 25%, rgb(167 243 208) 100%);
+    background: linear-gradient(135deg, #f0fdf9 0%, #e8fdf4 25%, #d1fae5 50%, #a7f3d0 100%);
   }
   
   .bg-page-gradient-pink {
-    background: linear-gradient(135deg, rgb(253 242 248) 0%, rgb(252 231 243) 25%, rgb(249 168 212) 100%);
+    background: linear-gradient(135deg, #fef7f7 0%, #fce7f3 25%, #fbcfe8 50%, #f9a8d4 100%);
   }
 
-  /* Dark mode page gradients */
+  /* Dark mode page gradients - Sophisticated Dark */
   .dark .bg-page-gradient-blue {
-    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(30 58 138) 25%, rgb(79 70 229) 100%);
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 25%, #334155 50%, #475569 100%);
   }
   
   .dark .bg-page-gradient-purple {
-    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(88 28 135) 25%, rgb(139 92 246) 100%);
+    background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 25%, #16213e 50%, #0f3460 100%);
   }
   
   .dark .bg-page-gradient-green {
-    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(6 78 59) 25%, rgb(34 197 94) 100%);
+    background: linear-gradient(135deg, #0a0f0f 0%, #0f1b1b 25%, #134e4a 50%, #0d9488 100%);
   }
   
   .dark .bg-page-gradient-pink {
-    background: linear-gradient(135deg, rgb(15 23 42) 0%, rgb(131 24 67) 25%, rgb(236 72 153) 100%);
+    background: linear-gradient(135deg, #1a0a14 0%, #2d1b2e 25%, #4a1d4a 50%, #7c3aed 100%);
   }
 
   /* Glass morphism effects */
@@ -145,32 +162,32 @@
     box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
   }
 
-  /* Text gradient effects */
+  /* Text gradient effects - Premium Look */
   .text-gradient-primary {
-    background: linear-gradient(135deg, rgb(79 70 229), rgb(139 92 246));
+    background: linear-gradient(135deg, #667eea, #764ba2);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
   
   .text-gradient-accent {
-    background: linear-gradient(135deg, rgb(139 92 246), rgb(236 72 153));
+    background: linear-gradient(135deg, #f093fb, #f5576c);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
-  /* Button specific styles */
+  /* Button specific styles - Modern Design */
   .btn-primary {
-    background: linear-gradient(135deg, rgb(79 70 229) 0%, rgb(139 92 246) 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.3);
+    box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.3);
     transition: all 0.2s ease;
   }
   
   .btn-primary:hover {
-    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
     transform: translateY(-1px);
   }
   
