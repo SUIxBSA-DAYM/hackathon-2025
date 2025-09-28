@@ -71,29 +71,7 @@ module tickets_package::user{
         client.is_active
     }
 
-    /* Désactiver le
-     client
-    public fun deactivate_client(client: &mut Client) {
-       client.is_active = false;
-
-}
-
-    public fun activate_client(client: &mut Client) {
-        client.is_active = true;
-    }
-
-    public fun get_organizer_events(organizer: &Organizer): &vector<address> {
-        &organizer.events
-    }
-
-    public fun get_client_id(client: &Client): &UID {
-        &client.id
-    }
-
-    public fun get_organizer_id(organizer: &Organizer): &UID {
-        &organizer.id
-    }
-     */
+   
 
     
     // Verify if the client is active

@@ -19,6 +19,10 @@ module tickets_package::tickets_package {
     // --- Errors ---
     /// Error thrown when the lengths of the places and capacities vectors do not match.
     const EPlaceNameCapacityLengthMismatch: u64 = 400;
+    const ETicketsSoldOut: u64 = 401;
+    const EEventInPast: u64 = 402;
+    const EEventMismatch: u64 = 403;
+    const ENFTAlreadyUsed: u64 = 404;
 
     public struct Event has key, store {
         id: UID,
@@ -93,6 +97,14 @@ module tickets_package::tickets_package {
         }
     }
 
+    public fun create_place(name: String, price_sui: u64, capacity: u64): Place {
+        Place {
+            name,
+            price_sui,
+            capacity
+        }
+    }
+
     /// Create a new event, only the organization owner should call this function
     public fun create_event(
         name: String,
@@ -117,11 +129,12 @@ module tickets_package::tickets_package {
         let event_id = object::new(ctx);
         let mut idx = 0;
         while (idx < vector::length(&places)) {
-            let place = Place {
-                capacity: *vector::borrow(&capacities, idx),
-                name: *vector::borrow(&places, idx),
-                price_sui: *vector::borrow(&prices, idx)
-            };
+            let place = create_place(
+                *vector::borrow(&places, idx),
+                *vector::borrow(&prices, idx),
+                *vector::borrow(&capacities, idx),
+
+            );
             table::add(&mut inventory.places, place, vector::empty<Nft>());
             let mut idx2 = 0;
             while (idx2 < place.capacity) {
@@ -148,13 +161,13 @@ module tickets_package::tickets_package {
 
     public fun buy_ticket(payment_coin: &mut Coin<SUI>, user: address, event: &mut Event, place: Place, clock: &Clock, ctx: &mut TxContext) {
         let mut tickets = table::borrow_mut(&mut event.inventory.places, place);
-        assert!(vector::length(tickets) > 0, 401);
+        assert!(vector::length(tickets) > 0, ETicketsSoldOut);
         let pay_coin = coin::split(payment_coin, place.price_sui, ctx);
         let nft = tickets.pop_back();
         let Nft {id, event, creation_date, owner, organizer, used, name} = nft;
         id.delete();
         let current_time = timestamp_ms(clock);
-        assert!(creation_date < current_time, 402);
+        assert!(creation_date < current_time, EEventInPast);
         let user_ntf = UserNft {
             id: object::new(ctx),
             event,
@@ -183,6 +196,12 @@ module tickets_package::tickets_package {
     public fun is_used(ticket: &Nft):bool {
         ticket.used
     }
+    public fun validate_ticket(nft: &mut UserNft, event: address) {
+        assert!(nft.event == event, EEventMismatch);
+        assert!(!nft.used, ENFTAlreadyUsed);
+        nft.used = true;
+    }
+
 }
 
 
