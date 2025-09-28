@@ -2,14 +2,15 @@
  * Move Contract Service
  * Handles interactions with the published Sui Move contract
  */
-import { SuiClient } from '@mysten/sui/client';
+import { getFullnodeUrl, SuiClient } from '@mysten/sui/client';
 import { Transaction } from '@mysten/sui/transactions';
 import { MOVE_CONFIG, MOVE_FUNCTIONS, buildMoveTarget } from '../config/moveConfig.js';
 
 export class MoveService {
   constructor() {
+    console.log('Initializing MoveService with config (ZK):', MOVE_CONFIG);
     this.client = new SuiClient({ 
-      url: `https://fullnode.${MOVE_CONFIG.NETWORK}.sui.io` 
+      url: getFullnodeUrl(MOVE_CONFIG.NETWORK) 
     });
   }
 
@@ -31,7 +32,9 @@ export class MoveService {
       tx.moveCall({
         target: buildMoveTarget(MOVE_FUNCTIONS.CREATE_ORGANIZER),
         arguments: [
-          tx.pure.string(organizerUrl) // URL parameter
+          tx.pure.string(organizerUrl), // URL parameter,
+          tx.pure.string("Organigogogo"),
+          tx.pure.address(zkWallet.address) // Signer's address
         ]
       });
 

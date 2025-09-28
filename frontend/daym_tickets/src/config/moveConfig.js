@@ -6,8 +6,8 @@
 // Contract configuration - UPDATE THESE WITH YOUR ACTUAL VALUES
 export const MOVE_CONFIG = {
   // Replace with your actual package ID after deployment
-  PACKAGE_ID: "0xb40fe9333a17b3797765d45f6ef5fbe4628df5f3165b7071b0846c1fc685e557",
-  MODULE_NAME: "tickets_package",
+  PACKAGE_ID: "0x760fea41cd256e223715b22f8ec89143b877453915439c4a698c5e7062a6ca5b",
+  MODULE_NAME: "user",
   NETWORK: "testnet", // or "testnet", "mainnet"
 };
 
@@ -22,5 +22,7 @@ export const MOVE_FUNCTIONS = {
 
 // Helper function to build Move call target
 export const buildMoveTarget = (functionName) => {
-  return `${MOVE_CONFIG.PACKAGE_ID}::${MOVE_CONFIG.MODULE_NAME}::${functionName}`;
+    const target = `${MOVE_CONFIG.PACKAGE_ID}::${MOVE_CONFIG.MODULE_NAME}::${functionName}`;
+    console.log("Move target:", target);
+    return target;
 };

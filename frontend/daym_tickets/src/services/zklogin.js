@@ -9,9 +9,10 @@ import {
 import { SuiClient } from '@mysten/sui/client';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
+import { moveService } from './moveService.js';
 
 // Configuration
-const FULLNODE_URL = import.meta.env.VITE_FULLNODE_URL || 'https://fullnode.devnet.sui.io';
+const FULLNODE_URL = import.meta.env.VITE_FULLNODE_URL || 'https://fullnode.testnet.sui.io';
 const PROVER_URL = import.meta.env.VITE_PROVER_URL || 'https://prover-dev.mystenlabs.com/v1';
 const SALT_SERVER_URL = import.meta.env.VITE_SALT_SERVER_URL || 'https://salt.api.mystenlabs.com/get_salt';
 
@@ -21,7 +22,7 @@ const REDIRECT_URL = import.meta.env.VITE_REDIRECT_URL || `${window.location.ori
 
 export class ZkLoginService {
   constructor() {
-    this.suiClient = new SuiClient({ url: FULLNODE_URL });
+    this.suiClient = moveService.client;
     this.ephemeralKeyPair = null;
     this.maxEpoch = null;
     this.randomness = null;
@@ -46,35 +47,35 @@ export class ZkLoginService {
       this.maxEpoch = Number(epoch) + 2; // Active for 2 epochs
 
       // Generate ephemeral key pair
-      this.ephemeralKeyPair = new Ed25519Keypair();
+      this.ephemeralKeyPair = new Ed25519Keypair.generate();
       console.log('Generated ephemeral key pair with public key:', this.ephemeralKeyPair.getPublicKey());
       
       // Generate randomness and nonce
       this.randomness = generateRandomness();
+      console.log('🔍 Generated randomness1:', this.randomness);
+      console.log('🔍 Generated maxEpoch1:', this.maxEpoch);
+      console.log('🔍 Ephemeral public key1:', this.ephemeralKeyPair.getPublicKey().toSuiAddress());
       this.nonce = generateNonce(
         this.ephemeralKeyPair.getPublicKey(), 
         this.maxEpoch, 
         this.randomness
       );
 
-      // 🚨 CRITICAL: Save ephemeral key pair and maxEpoch BEFORE OAuth redirect
-      // This prevents losing them when the app reloads after OAuth callback
-      console.log('💾 Saving ephemeral key pair and maxEpoch before OAuth redirect...');
+      // 🚨 CRITICAL: Save ephemeral key pair and essential state BEFORE OAuth redirect
+      console.log('💾 Saving essential zkLogin state before OAuth redirect...');
       try {
-        // Export the keypair properly - use getSecretKey() and take only the first 32 bytes
-        const fullSecretKey = this.ephemeralKeyPair.getSecretKey();
-        console.log('🔍 Full secret key length:', fullSecretKey.length);
+        // Store the secret key (only first 32 bytes)
+        const secretKey32Bytes = this.ephemeralKeyPair.export().privateKey;
         
-        // Ed25519 secret key is always 32 bytes, take only the first 32 bytes
-        const secretKey32Bytes = fullSecretKey.slice(0, 32);
-        console.log('🔍 Trimmed secret key length:', secretKey32Bytes.length);
-        
-        const secretKeyBase64 = btoa(String.fromCharCode(...secretKey32Bytes));
+        // Store essential state (nonce will be extracted from JWT)
         localStorage.setItem('zklogin_ephemeral_key_temp', secretKeyBase64);
         localStorage.setItem('zklogin_max_epoch_temp', this.maxEpoch.toString());
         localStorage.setItem('zklogin_randomness_temp', this.randomness.toString());
+        
         console.log('✅ Pre-OAuth state saved to localStorage');
-        console.log('🔍 Saved private key base64 length:', secretKeyBase64.length);
+        console.log('🔍 Saved maxEpoch:', this.maxEpoch);
+        console.log('🔍 Saved randomness:', this.randomness);
+        console.log('🔍 Nonce will be extracted from JWT after OAuth callback');
       } catch (saveError) {
         console.error('❌ Failed to save pre-OAuth state:', saveError);
       }
@@ -122,17 +123,20 @@ export class ZkLoginService {
     const urlObj = new URL(url);
     
     let idToken = null;
+    let nonce = null;
     
     // First try to get from hash fragment (standard for implicit flow)
     if (urlObj.hash) {
       const hashParams = new URLSearchParams(urlObj.hash.substring(1));
       idToken = hashParams.get('id_token');
+      nonce = hashParams.get('nonce'); // Try to get nonce from hash
     }
     
     // Fallback: try search parameters
     if (!idToken && urlObj.search) {
       const searchParams = new URLSearchParams(urlObj.search);
       idToken = searchParams.get('id_token');
+      nonce = searchParams.get('nonce'); // Try to get nonce from search params
     }
     
     if (!idToken) {
@@ -141,6 +145,22 @@ export class ZkLoginService {
 
     this.jwt = idToken;
     console.log('✅ JWT extracted from callback URL');
+    
+    // Extract nonce directly from URL parameters (more reliable than JWT)
+    if (nonce) {
+      this.nonce = nonce;
+      console.log('✅ Nonce extracted from URL parameters:', this.nonce);
+    } else {
+      // Fallback: try to get nonce from JWT payload if not in URL
+      try {
+        const payload = this.decodeJWT(idToken);
+        this.nonce = payload.nonce;
+        console.log('✅ Nonce extracted from JWT payload (fallback):', this.nonce);
+      } catch (error) {
+        console.error('❌ Failed to extract nonce from URL or JWT:', error);
+        throw new Error('Failed to extract nonce from URL or JWT');
+      }
+    }
     
     return idToken;
   }
@@ -165,7 +185,7 @@ export class ZkLoginService {
       
       if (ephemeralKeyTemp && maxEpochTemp && randomnessTemp) {
         // Restore ephemeral key pair from the base64 encoded private key
-        console.log('🔍 Restoring private key base64 length:', ephemeralKeyTemp.length);
+        console.log('🔍 Restoring private key base64 length:', ephemeralKeyTemp);
         
         // Decode base64 to bytes
         const secretKeyBytes = Uint8Array.from(atob(ephemeralKeyTemp), c => c.charCodeAt(0));
@@ -178,12 +198,15 @@ export class ZkLoginService {
         
         this.ephemeralKeyPair = Ed25519Keypair.fromSecretKey(secretKeyBytes);
         
-        // Restore other state
+        // Restore other state (nonce will be extracted from JWT)
         this.maxEpoch = parseInt(maxEpochTemp);
         this.randomness = randomnessTemp;
         
         console.log('✅ Pre-OAuth state restored successfully');
+        console.log('🔍 Restored maxEpoch:', this.maxEpoch);
+        console.log('🔍 Restored randomness:', this.randomness);
         console.log('🔍 Restored ephemeral key pair public key:', this.ephemeralKeyPair.getPublicKey().toSuiAddress());
+        console.log('🔍 Nonce will be extracted from JWT payload');
         
         // Clean up temporary storage
         localStorage.removeItem('zklogin_ephemeral_key_temp');
@@ -192,7 +215,6 @@ export class ZkLoginService {
         console.log('🧹 Temporary storage cleaned up');
         
       } else {
-        console.warn('⚠️ Pre-OAuth state incomplete or missing');
       }
     } catch (error) {
       console.error('❌ Failed to restore pre-OAuth state:', error);
@@ -346,7 +368,7 @@ export class ZkLoginService {
   /**
    * Sign and execute a transaction with zkLogin
    */
-  async signAndExecuteTransaction(transactionBlock) {
+  async signAndExecuteTransaction({ transaction, options = {} }) {
     console.log('🔐 signAndExecuteTransaction called');
     
     // Validate all required components
@@ -357,12 +379,13 @@ export class ZkLoginService {
 
     try {
       console.log('📝 Setting transaction sender:', this.zkLoginUserAddress);
-      // Set the sender
-      transactionBlock.setSender(this.zkLoginUserAddress);
+      // Set the sender on the transaction
+      transaction.setSender(this.zkLoginUserAddress);
 
       console.log('✍️ Signing transaction with ephemeral key pair');
       // Sign transaction with ephemeral key pair
-      const { bytes, signature: userSignature } = await transactionBlock.sign({
+      console.log('Ephemeral public key:', this.ephemeralKeyPair.getPublicKey());
+      const { bytes, signature: userSignature } = await transaction.sign({
         client: this.suiClient,
         signer: this.ephemeralKeyPair
       });
@@ -399,7 +422,8 @@ export class ZkLoginService {
       // Execute transaction
       const result = await this.suiClient.executeTransactionBlock({
         transactionBlock: bytes,
-        signature: zkLoginSignature
+        signature: zkLoginSignature,
+        ...options
       });
 
       console.log('✅ Transaction executed successfully:', result);
@@ -722,7 +746,8 @@ export class ZkLoginService {
     console.log('✅ Authenticated - returning wallet interface');
     return {
       address: this.zkLoginUserAddress,
-      signAndExecuteTransaction: this.signAndExecuteTransaction.bind(this)
+      signAndExecuteTransaction: ({ transaction, options }) => 
+        this.signAndExecuteTransaction({ transaction, options })
     };
   }
 }
