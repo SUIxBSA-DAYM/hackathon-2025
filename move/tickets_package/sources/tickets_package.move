@@ -176,8 +176,13 @@ module tickets_package::tickets_package {
 
     }
 
+    public fun expire_ticket(ticket: &mut Nft) {
+        ticket.used = true; 
+    }
 
-
+    public fun is_used(ticket: &Nft):bool {
+        ticket.used
+    }
 }
 
 

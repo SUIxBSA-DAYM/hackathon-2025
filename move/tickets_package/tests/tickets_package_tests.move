@@ -1,5 +1,4 @@
-/*
-#[test_only]
+/*#[test_only]
 module tickets_package::tickets_package_tests;
 // uncomment this line to import the module
 // use tickets_package::tickets_package;
