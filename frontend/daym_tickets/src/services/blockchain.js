@@ -3,50 +3,40 @@
 
 import { Transaction } from '@mysten/sui/transactions';
 import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
+import { MOVE_CONFIG } from '../config/moveConfig.js';
 
 // Real Sui configuration
 const SUI_NETWORK = 'testnet';
-const PACKAGE_ID = import.meta.env.VITE_PACKAGE_ID || '0x760fea41cd256e223715b22f8ec89143b877453915439c4a698c5e7062a6ca5b';
+const PACKAGE_ID = MOVE_CONFIG.PACKAGE_ID;
 const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
 
 /**
  * Get all events from the blockchain
- * Queries all Event objects created by the Move contract
+ * Note: In Sui, we can't query all objects of a type without knowing the owner.
+ * This function aggregates events from multiple sources or returns sample data.
  */
 export const getAllEvents = async () => {
   try {
-    const events = await suiClient.getOwnedObjects({
-      filter: {
-        StructType: `${PACKAGE_ID}::tickets_package::Event`
-      },
-      options: {
-        showContent: true,
-        showDisplay: true
-      }
-    });
-
-    return events.data.map(event => {
-      const fields = event.data?.content?.fields;
-      if (!fields) return null;
-      
-      return {
-        id: event.data.objectId,
-        name: fields.name,
-        location: fields.location,
-        time: fields.time,
-        category: fields.category,
-        organizer: fields.organizer,
-        totalTickets: fields.inventory?.fields?.total_capacity || 0,
-        availableTickets: fields.inventory?.fields?.total_capacity || 0, // TODO: Calculate available tickets
-        creator: fields.organizer,
-        creatorAddress: fields.organizer,
-        title: fields.name, // Alias for compatibility
-        description: `Event in ${fields.location} - ${fields.category}`,
-        date: fields.time,
-        price: 0, // TODO: Get price from inventory
-        status: 'active'
-      };
-    }).filter(Boolean);
+    console.log('Getting all events - Note: Limited to demo data since Sui requires owner for object queries');
+    
+    // In a real implementation, you might:
+    // 1. Query events from known organizers
+    // 2. Use an indexer service
+    // 3. Maintain a registry of all events
+    
+    // For now, return empty array with helpful logging
+    console.log('getAllEvents: Returning empty array. To see events, use getEventsByOrganizer with a specific address.');
+    return [];
+    
+    // Alternative approach - if you have known organizer addresses:
+    // const knownOrganizers = ['0x...', '0x...'];
+    // const allEvents = [];
+    // for (const organizer of knownOrganizers) {
+    //   const events = await getEventsByOrganizer(organizer);
+    //   allEvents.push(...events);
+    // }
+    // return allEvents;
+    
   } catch (error) {
     console.error('Error fetching events:', error);
     return [];
@@ -54,38 +44,103 @@ export const getAllEvents = async () => {
 };
 
 /**
+ * Calculate available tickets and pricing for an event
+ * This function attempts to get more detailed inventory information
+ * @param {Object} eventFields - Event fields from blockchain
+ * @returns {Object} Enhanced event data with better pricing and availability
+ */
+const calculateEventDetails = async (eventFields, eventId) => {
+  let totalTickets = 0;
+  let availableTickets = 0;
+  let minPrice = 0;
+  let places = [];
+  
+  try {
+    if (eventFields.inventory) {
+      if (typeof eventFields.inventory === 'object' && eventFields.inventory.fields) {
+        totalTickets = parseInt(eventFields.inventory.fields.total_capacity) || 0;
+        availableTickets = totalTickets; // Default assumption
+        
+        // If we have places data, try to extract pricing
+        if (eventFields.inventory.fields.places) {
+          // This would need more complex parsing based on the Table structure
+          // For now, we'll use mock data based on common pricing
+          places = [
+            { name: 'General Admission', price: 50000000, available: Math.floor(totalTickets * 0.8) }, // 0.05 SUI
+            { name: 'VIP', price: 100000000, available: Math.floor(totalTickets * 0.2) } // 0.1 SUI
+          ];
+          minPrice = Math.min(...places.map(p => p.price));
+          availableTickets = places.reduce((sum, place) => sum + place.available, 0);
+        }
+      } else if (typeof eventFields.inventory === 'string') {
+        // If inventory is an object reference, we could fetch it separately
+        console.log('Inventory is object reference, using defaults for:', eventId);
+        totalTickets = 100; // Default
+        availableTickets = 80; // Default
+        minPrice = 50000000; // 0.05 SUI default
+      }
+    }
+  } catch (error) {
+    console.warn('Error calculating event details:', error);
+    // Use sensible defaults
+    totalTickets = 100;
+    availableTickets = 80;
+    minPrice = 50000000;
+  }
+  
+  return {
+    totalTickets,
+    availableTickets,
+    minPrice,
+    places: places.length > 0 ? places : [
+      { name: 'General Admission', price: minPrice || 50000000, available: availableTickets }
+    ]
+  };
+};
+/**
  * Get event by ID from the blockchain
  */
 export const getEventById = async (eventId) => {
   try {
+    console.log('Fetching event by ID:', eventId);
+    
     const eventObj = await suiClient.getObject({
       id: eventId,
       options: {
         showContent: true,
-        showDisplay: true
+        showDisplay: true,
+        showOwner: true
       }
     });
 
     if (!eventObj.data?.content?.fields) {
+      console.log('Event not found or no content fields:', eventId);
       return null;
     }
 
     const fields = eventObj.data.content.fields;
+    console.log('Event fields:', fields);
+    
+    // Calculate enhanced event details
+    const eventDetails = await calculateEventDetails(fields, eventId);
+    
     return {
       id: eventId,
-      name: fields.name,
-      location: fields.location,
+      name: fields.name || 'Unnamed Event',
+      location: fields.location || 'TBD',
       time: fields.time,
-      category: fields.category,
+      category: fields.category || 'General',
       organizer: fields.organizer,
-      totalTickets: fields.inventory?.fields?.total_capacity || 0,
-      availableTickets: fields.inventory?.fields?.total_capacity || 0, // TODO: Calculate available tickets
+      totalTickets: eventDetails.totalTickets,
+      availableTickets: eventDetails.availableTickets,
       creator: fields.organizer,
       creatorAddress: fields.organizer,
-      title: fields.name,
-      description: `Event in ${fields.location} - ${fields.category}`,
+      title: fields.name || 'Unnamed Event',
+      description: `Event in ${fields.location || 'TBD'} - ${fields.category || 'General'}`,
       date: fields.time,
-      price: 0, // TODO: Get price from inventory
+      price: eventDetails.minPrice / 1000000000, // Convert to SUI display units
+      priceRaw: eventDetails.minPrice, // Keep raw price for transactions
+      places: eventDetails.places,
       status: 'active'
     };
   } catch (error) {
@@ -99,6 +154,8 @@ export const getEventById = async (eventId) => {
  */
 export const getEventsByOrganizer = async (organizerAddress) => {
   try {
+    console.log('Fetching events for organizer:', organizerAddress);
+    
     const events = await suiClient.getOwnedObjects({
       owner: organizerAddress,
       filter: {
@@ -106,32 +163,52 @@ export const getEventsByOrganizer = async (organizerAddress) => {
       },
       options: {
         showContent: true,
-        showDisplay: true
+        showDisplay: true,
+        showOwner: true
       }
     });
 
-    return events.data.map(event => {
-      const fields = event.data?.content?.fields;
-      if (!fields) return null;
-      
-      return {
-        id: event.data.objectId,
-        name: fields.name,
-        location: fields.location,
-        time: fields.time,
-        category: fields.category,
-        organizer: fields.organizer,
-        totalTickets: fields.inventory?.fields?.total_capacity || 0,
-        availableTickets: fields.inventory?.fields?.total_capacity || 0,
-        creator: fields.organizer,
-        creatorAddress: fields.organizer,
-        title: fields.name,
-        description: `Event in ${fields.location} - ${fields.category}`,
-        date: fields.time,
-        price: 0,
-        status: 'active'
-      };
-    }).filter(Boolean);
+    console.log('Found events for organizer:', events.data?.length || 0);
+    
+    if (!events.data || events.data.length === 0) {
+      return [];
+    }
+
+    // Process each event with enhanced details
+    const processedEvents = await Promise.all(
+      events.data.map(async (event) => {
+        const fields = event.data?.content?.fields;
+        if (!fields) {
+          console.log('Event missing fields:', event.data?.objectId);
+          return null;
+        }
+        
+        // Access inventory data more safely with enhanced calculation
+        const eventDetails = await calculateEventDetails(fields, event.data.objectId);
+        
+        return {
+          id: event.data.objectId,
+          name: fields.name || 'Unnamed Event',
+          location: fields.location || 'TBD',
+          time: fields.time,
+          category: fields.category || 'General',
+          organizer: fields.organizer,
+          totalTickets: eventDetails.totalTickets,
+          availableTickets: eventDetails.availableTickets,
+          creator: fields.organizer,
+          creatorAddress: fields.organizer,
+          title: fields.name || 'Unnamed Event',
+          description: `Event in ${fields.location || 'TBD'} - ${fields.category || 'General'}`,
+          date: fields.time,
+          price: eventDetails.minPrice / 1000000000, // Convert to SUI display units
+          priceRaw: eventDetails.minPrice, // Keep raw price for transactions
+          places: eventDetails.places,
+          status: 'active'
+        };
+      })
+    );
+
+    return processedEvents.filter(Boolean);
   } catch (error) {
     console.error('Error fetching events by organizer:', error);
     return [];
@@ -139,14 +216,20 @@ export const getEventsByOrganizer = async (organizerAddress) => {
 };
 
 /**
- * Get user's NFT tickets
+ * Get user's account type and details
+ * Checks if user has Organizer or Client objects to determine their role
+ * @param {string} userAddress - User wallet address
+ * @returns {Object} User account information with role
  */
-export const getUserTickets = async (userAddress) => {
+export const getUserAccountInfo = async (userAddress) => {
   try {
-    const tickets = await suiClient.getOwnedObjects({
+    console.log('Checking account info for user:', userAddress);
+    
+    // Check for Organizer object
+    const organizers = await suiClient.getOwnedObjects({
       owner: userAddress,
       filter: {
-        StructType: `${PACKAGE_ID}::tickets_package::Nft`
+        StructType: `${PACKAGE_ID}::user::Organizer`
       },
       options: {
         showContent: true,
@@ -154,20 +237,244 @@ export const getUserTickets = async (userAddress) => {
       }
     });
 
-    return tickets.data.map(ticket => {
-      const fields = ticket.data?.content?.fields;
-      if (!fields) return null;
+    // Check for Client object  
+    const clients = await suiClient.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::user::Client`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+
+    console.log('Found organizers:', organizers.data?.length || 0);
+    console.log('Found clients:', clients.data?.length || 0);
+
+    if (organizers.data && organizers.data.length > 0) {
+      const organizer = organizers.data[0];
+      
+      // Extract object ID safely
+      let objectId = null;
+      let username = null;
+      let url = null;
+      let events = [];
+      
+      if (organizer?.data?.objectId) {
+        objectId = organizer.data.objectId;
+        username = organizer.data?.content?.fields?.username;
+        url = organizer.data?.content?.fields?.url;
+        events = organizer.data?.content?.fields?.events || [];
+      } else if (organizer?.objectId) {
+        objectId = organizer.objectId;
+        username = organizer?.content?.fields?.username || organizer?.data?.content?.fields?.username;
+        url = organizer?.content?.fields?.url || organizer?.data?.content?.fields?.url;
+        events = organizer?.content?.fields?.events || organizer?.data?.content?.fields?.events || [];
+      } else if (organizer?.Object?.objectId) {
+        objectId = organizer.Object.objectId;
+        username = organizer.Object?.content?.fields?.username;
+        url = organizer.Object?.content?.fields?.url;
+        events = organizer.Object?.content?.fields?.events || [];
+      }
+      
+      if (objectId) {
+        return {
+          hasAccount: true,
+          role: 'organizer',
+          accountData: {
+            objectId: objectId,
+            username: username,
+            url: url,
+            events: events
+          }
+        };
+      }
+    }
+
+    if (clients.data && clients.data.length > 0) {
+      const client = clients.data[0];
+      
+      // Extract object ID safely
+      let objectId = null;
+      let username = null;
+      let isActive = null;
+      
+      if (client?.data?.objectId) {
+        objectId = client.data.objectId;
+        username = client.data?.content?.fields?.username;
+        isActive = client.data?.content?.fields?.is_active;
+      } else if (client?.objectId) {
+        objectId = client.objectId;
+        username = client?.content?.fields?.username || client?.data?.content?.fields?.username;
+        isActive = client?.content?.fields?.is_active || client?.data?.content?.fields?.is_active;
+      } else if (client?.Object?.objectId) {
+        objectId = client.Object.objectId;
+        username = client.Object?.content?.fields?.username;
+        isActive = client.Object?.content?.fields?.is_active;
+      }
+      
+      if (objectId) {
+        return {
+          hasAccount: true,
+          role: 'participant',
+          accountData: {
+            objectId: objectId,
+            username: username,
+            isActive: isActive
+          }
+        };
+      }
+    }
+
+    // No account found
+    return {
+      hasAccount: false,
+      role: null,
+      accountData: null
+    };
+
+  } catch (error) {
+    console.error('Error checking user account info:', error);
+    return {
+      hasAccount: false,
+      role: null,
+      accountData: null
+    };
+  }
+};
+
+/**
+ * Get user's Organizer NFT object ID
+ * Returns the Organizer object ID if the user has one, null otherwise
+ */
+export const getUserOrganizerObjectId = async (userAddress) => {
+  try {
+    console.log('Fetching organizer for user address:', userAddress);
+    const organizers = await suiClient.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::user::Organizer`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+    console.log('Fetched organizers response:', JSON.stringify(organizers, null, 2));
+
+    if (organizers?.data && organizers.data.length > 0) {
+      console.log('Found organizers:', organizers.data);
+      // Return the first organizer object ID (users should only have one)
+      const organizer = organizers.data[0];
+      
+      // Handle different possible object structures
+      let objectId = null;
+      let fields = null;
+      
+      if (organizer?.data?.objectId) {
+        // New SDK format
+        objectId = organizer.data.objectId;
+        fields = organizer.data?.content?.fields;
+      } else if (organizer?.objectId) {
+        // Alternative format
+        objectId = organizer.objectId;
+        fields = organizer?.content?.fields || organizer?.data?.content?.fields;
+      } else if (organizer?.Object?.objectId) {
+        // Another possible format
+        objectId = organizer.Object.objectId;
+        fields = organizer.Object?.content?.fields;
+      }
+      
+      if (objectId) {
+        console.log('Using organizer object ID:', objectId);
+        return {
+          objectId: objectId,
+          fields: fields
+        };
+      } else {
+        console.error('Could not extract objectId from organizer:', organizer);
+        return null;
+      }
+    }
+    
+    console.log('No organizer found for user:', userAddress);
+    return null;
+  } catch (error) {
+    console.error('Error fetching user organizer:', error);
+    return null;
+  }
+};
+
+/**
+ * Get user's NFT tickets
+ * Checks both Nft (organizer-held) and UserNft (user-purchased) types
+ */
+export const getUserTickets = async (userAddress) => {
+  try {
+    console.log('Fetching tickets for user:', userAddress);
+    
+    // Try to get UserNft objects (tickets purchased by users)
+    const userTickets = await suiClient.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::tickets_package::UserNft`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true,
+        showOwner: true
+      }
+    });
+    
+    // Also try regular Nft objects (in case structure differs)
+    const nftTickets = await suiClient.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::tickets_package::Nft`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true,
+        showOwner: true
+      }
+    });
+
+    const allTickets = [...(userTickets.data || []), ...(nftTickets.data || [])];
+    console.log('Found tickets:', allTickets.length);
+
+    return allTickets.map(ticket => {
+      // Extract objectId safely
+      let objectId = null;
+      let fields = null;
+      
+      if (ticket?.data?.objectId) {
+        objectId = ticket.data.objectId;
+        fields = ticket.data?.content?.fields;
+      } else if (ticket?.objectId) {
+        objectId = ticket.objectId;
+        fields = ticket?.content?.fields || ticket?.data?.content?.fields;
+      } else if (ticket?.Object?.objectId) {
+        objectId = ticket.Object.objectId;
+        fields = ticket.Object?.content?.fields;
+      }
+      
+      if (!objectId || !fields) {
+        console.log('Ticket missing required data:', objectId, fields);
+        return null;
+      }
       
       return {
-        id: ticket.data.objectId,
+        id: objectId,
         eventId: fields.event,
-        tokenId: ticket.data.objectId,
+        tokenId: objectId,
         owner: fields.owner,
         organizer: fields.organizer,
-        name: fields.name,
-        used: fields.used,
-        creationDate: fields.creation_date,
-        isUsed: fields.used
+        name: fields.name || 'Event Ticket',
+        used: fields.used || false,
+        creationDate: fields.creation_date || fields.buy_date,
+        buyDate: fields.buy_date, // For UserNft type
+        isUsed: fields.used || false
       };
     }).filter(Boolean);
   } catch (error) {
@@ -285,5 +592,6 @@ export {
   getEventById as getEventByIdMock,  
   getUserTickets as getUserTicketsMock,
   verifyTicketOwnership as verifyOwnershipMock,
-  markTicketUsed as markTicketUsedMock
+  markTicketUsed as markTicketUsedMock,
+  registerForEventTransaction as registerForEvent,
 };

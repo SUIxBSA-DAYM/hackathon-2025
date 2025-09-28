@@ -14,6 +14,20 @@ import Card from '../components/ui/Card';
 import Toggle from '../components/ui/Toggle';
 import Modal from '../components/ui/Modal';
 
+// Utility functions for formatting
+const formatSuiAmount = (amount) => {
+  if (!amount) return '0';
+  const num = parseFloat(amount);
+  // Format to 7 decimals then remove trailing zeros
+  return num.toFixed(7).replace(/\.?0+$/, '');
+};
+
+const shortenTokenId = (id) => {
+  if (!id) return 'N/A';
+  if (id.length <= 12) return id;
+  return `${id.slice(0, 6)}...${id.slice(-6)}`;
+};
+
 /**
  * Profile Page - User dashboard showing wallet info and created events
  * Protected route - requires wallet connection
@@ -25,6 +39,9 @@ const Profile = () => {
     balance, 
     refreshBalance, 
     createOrganizerOnChain,
+    registerForEvent,
+    buyTicket,
+    validateTicket,
     txPending,
     txSuccess
   } = useAuth();
@@ -32,6 +49,7 @@ const Profile = () => {
   const { isDark, toggleTheme } = useTheme();
   const { 
     createOrganizer,
+    createEvent,
     isPending: isCreatingOrganizer
   } = useWalletOperations();
   const navigate = useNavigate();
@@ -120,10 +138,10 @@ const Profile = () => {
     try {
       setMoveTestResult('🔍 Creating organizer on-chain...');
       
+      // Updated function signature: createOrganizer(url, username)
       const result = await createOrganizer(
-        user.name || 'Test Organizer',
-        user.email || 'test@example.com', 
-        user.address
+        user.website || 'https://exampl2e.com',
+        user.name || 'Test Organizer2'
       );
       
       setMoveTestResult(`🎉 Success! Organizer created!\nTransaction: ${result.digest}\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
@@ -144,22 +162,35 @@ const Profile = () => {
     setMoveTestResult('');
     
     try {
+      setMoveTestResult('🔍 Checking for user organizer...');
+      
+      // First, get the user's organizer object ID
+      const organizerInfo = await blockchainService.getUserOrganizerObjectId(user.address);
+      
+      if (!organizerInfo || !organizerInfo.objectId) {
+        setMoveTestResult(`⚠️ No Organizer found!\nYou need to create an organizer first before creating events.\nClick "Create Organizer" button first.`);
+        return;
+      }
+      
       setMoveTestResult('🔍 Creating test event on-chain...');
       
       const testEventData = {
         name: 'Test Blockchain Conference 2025',
-        description: 'A test event for Move contract integration',
+        category: 'Technology',
         location: 'Virtual Event Space',
         date: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
         maxParticipants: 100,
-        ticketPrice: 50
+        ticketPrice: 50,
+        places: ['General Admission', 'VIP'],
+        prices: [50, 100],
+        capacities: [80, 20]
       };
       
-      const result = await createEvent(testEventData);
+      console.log('Creating event with data using organizer:', organizerInfo.objectId);
+      const result = await createEvent(testEventData, organizerInfo.objectId);
+      setMoveTestResult(`🎉 Success! Event created!\nTransaction: ${result.digest}\nOrganizer Used: ${organizerInfo.objectId}\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
       
-      setMoveTestResult(`🎉 Success! Event created!\nTransaction: ${result.digest}\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
-      
-      // Refresh user events
+      // Refresh user events to show the new event
       loadUserCreatedEvents(user.address);
       
     } catch (error) {
@@ -171,25 +202,40 @@ const Profile = () => {
   };
 
   /**
-   * Test Move contract integration - Register for Event
+   * Test Move contract integration - Register for Event (Buy Ticket)
    */
   const handleTestRegisterForEvent = async () => {
     setIsTestingMove(true);
     setMoveTestResult('');
     
     try {
-      setMoveTestResult('🔍 Testing event registration...');
+      setMoveTestResult('🔍 Testing ticket purchase...');
       
-      // For testing, we'll use a dummy event ID - in practice this would be a real event
-      const testEventId = 'test-event-' + Date.now();
+      // For testing, we'll try to buy a ticket for a real event
+      // First check if user has any events to buy tickets for
+      const userEvents = await blockchainService.getAllEvents();
       
-      const result = await registerForEvent(
-        testEventId,
-        user.name || 'Test Participant',
-        user.email || 'test@example.com'
-      );
-      
-      setMoveTestResult(`🎉 Success! Registered for event!\nTransaction: ${result.digest}\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
+      if (userEvents.length === 0) {
+        // Use legacy registerForEvent for backward compatibility testing
+        const testEventId = 'test-event-' + Date.now();
+        
+        const result = await registerForEvent(
+          testEventId,
+          user.name || 'Test Participant',
+          user.email || 'test@example.com'
+        );
+        
+        setMoveTestResult(`🎉 Success! Event registration completed!\nTransaction: ${result.digest}\nNote: Used legacy registration method.\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
+      } else {
+        // Try to buy a ticket for the first available event
+        const event = userEvents[0];
+        const placeName = 'General Admission';
+        const paymentAmount = 50000000; // 0.05 SUI
+        
+        const result = await buyTicket(event.id, placeName, paymentAmount);
+        
+        setMoveTestResult(`🎉 Success! Ticket purchased!\nEvent: ${event.name}\nPlace: ${placeName}\nAmount: ${paymentAmount / 1000000000} SUI\nTransaction: ${result.digest}\nEffects: ${JSON.stringify(result.effects, null, 2)}`);
+      }
       
       // Refresh user tickets
       if (user.address) {
@@ -243,6 +289,32 @@ const Profile = () => {
     } catch (error) {
       console.error('Load user tickets test failed:', error);
       setMoveTestResult(`❌ Load user tickets failed: ${error.message}`);
+    } finally {
+      setIsTestingMove(false);
+    }
+  };
+
+  /**
+   * Test Move contract integration - Check User Organizer Status
+   */
+  const handleTestCheckOrganizer = async () => {
+    setIsTestingMove(true);
+    setMoveTestResult('');
+    
+    try {
+      setMoveTestResult('🔍 Checking user organizer status...');
+      
+      const organizerInfo = await blockchainService.getUserOrganizerObjectId(user.address);
+      
+      if (organizerInfo) {
+        setMoveTestResult(`🎉 Organizer Found!\nObject ID: ${organizerInfo.objectId}\nOrganizer Details: ${JSON.stringify(organizerInfo.fields, null, 2)}`);
+      } else {
+        setMoveTestResult(`ℹ️ No Organizer found.\nThis user has not created an organizer yet.\nCreate an organizer first to be able to create events.`);
+      }
+      
+    } catch (error) {
+      console.error('Check organizer test failed:', error);
+      setMoveTestResult(`❌ Check organizer failed: ${error.message}`);
     } finally {
       setIsTestingMove(false);
     }
@@ -416,6 +488,15 @@ const Profile = () => {
                   </Button>
                   
                   <Button
+                    onClick={handleTestCheckOrganizer}
+                    disabled={isTestingMove}
+                    variant="outline"
+                    size="sm"
+                  >
+                    🔍 Check Organizer
+                  </Button>
+                  
+                  <Button
                     onClick={handleTestCreateEvent}
                     disabled={isTestingMove || txPending}
                     variant="outline"
@@ -569,7 +650,7 @@ const Profile = () => {
                       </div>
                       <div>
                         <div className="text-2xl font-bold text-accent">
-                          {userEvents.reduce((sum, event) => sum + parseFloat(event.revenue), 0)} SUI
+                          {formatSuiAmount(userEvents.reduce((sum, event) => sum + parseFloat(event.revenue), 0))} SUI
                         </div>
                         <div className="text-sm text-muted-foreground">Total Revenue</div>
                       </div>
@@ -661,7 +742,7 @@ const EventCard = ({ event }) => {
         <div className="space-y-1 text-sm text-muted-foreground mb-3">
           <p>📍 {event.location}</p>
           <p>📅 {formatDate(event.date)}</p>
-          <p>💰 {event.price} SUI per ticket</p>
+          <p>💰 {formatSuiAmount(event.price)} SUI per ticket</p>
         </div>
 
         {/* Progress Bar */}

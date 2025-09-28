@@ -13,7 +13,7 @@ import Toggle from './ui/Toggle';
  * Main navigation bar with wallet connection and theme toggle
  */
 const Navigation = () => {
-  const { user, disconnectWallet } = useAuth();
+  const { user, userAccountInfo, disconnectWallet } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -44,10 +44,10 @@ const Navigation = () => {
 
           {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-6">
-            {user ? (
+            {user && userAccountInfo?.hasAccount ? (
               <>
                 {/* Organizer-only links */}
-                {user.type === 'organizer' && (
+                {userAccountInfo.role === 'organizer' && (
                   <>
                     <Link 
                       to="/create" 
@@ -69,15 +69,15 @@ const Navigation = () => {
                 )}
                 
                 {/* Participant-only links */}
-                {user.type === 'participant' && (
+                {userAccountInfo.role === 'participant' && (
                   <>
                     <Link 
-                      to="/event/demo-blockchain-conference" 
+                      to="/" 
                       className={`text-sm font-medium transition-colors hover:text-primary ${
-                        location.pathname.includes('/event/') ? 'text-primary' : 'text-muted-foreground'
+                        isActive('/') ? 'text-primary' : 'text-muted-foreground'
                       }`}
                     >
-                      🎆 Demo Event
+                      Browse Events
                     </Link>
                     <Link 
                       to="/profile" 
@@ -173,23 +173,23 @@ const Navigation = () => {
  * Mobile Menu Component (hamburger menu for mobile devices)
  */
 const MobileMenu = () => {
-  const { user } = useAuth();
+  const { user, userAccountInfo } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
 
   const isActive = (path) => location.pathname === path;
 
   const menuItems = [
-    ...(user?.type === 'organizer' ? [
+    ...(user && userAccountInfo?.hasAccount && userAccountInfo.role === 'organizer' ? [
       { path: '/create', label: 'Create Event', icon: '➕' },
       { path: '/profile', label: 'My Events', icon: '👤' },
     ] : []),
-    ...(user?.type === 'participant' ? [
-      { path: '/event/demo-blockchain-conference', label: 'Demo Event', icon: '🎆' },
+    ...(user && userAccountInfo?.hasAccount && userAccountInfo.role === 'participant' ? [
+      { path: '/', label: 'Browse Events', icon: '🎫' },
       { path: '/profile', label: 'My Tickets', icon: '🎫' },
     ] : []),
-    ...(!user ? [
-      { path: '/signin', label: 'Sign In', icon: '�' },
+    ...(!user || !userAccountInfo?.hasAccount ? [
+      { path: '/signin', label: 'Sign In', icon: '🔑' },
     ] : []),
     { path: '/verify', label: 'Verifier', icon: '✅' },
   ];

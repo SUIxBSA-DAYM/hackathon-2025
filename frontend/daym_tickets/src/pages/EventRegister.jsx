@@ -8,6 +8,14 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 
+// Utility functions for formatting
+const formatSuiAmount = (amount) => {
+  if (!amount) return '0';
+  const num = parseFloat(amount);
+  // Format to 7 decimals then remove trailing zeros
+  return num.toFixed(7).replace(/\.?0+$/, '');
+};
+
 /**
  * EventRegister Page - Event details and ticket purchasing
  * Shows event information and allows ticket minting
@@ -319,7 +327,7 @@ const EventRegister = () => {
               {/* Price Display */}
               <div className="text-center p-6 bg-gradient-secondary/10 rounded-lg glass-card-inner">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Price per ticket</p>
-                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{event.price} SUI</p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{formatSuiAmount(event.price)} SUI</p>
               </div>
 
               {/* Availability Status */}
@@ -427,7 +435,7 @@ const EventRegister = () => {
           <div className="p-4 bg-gradient-secondary/10 rounded-lg glass-card-inner">
             <div className="flex justify-between items-center">
               <span className="font-medium text-slate-900 dark:text-slate-100">Total Cost:</span>
-              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{totalPrice} SUI</span>
+              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{formatSuiAmount(totalPrice)} SUI</span>
             </div>
           </div>
 

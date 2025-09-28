@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useBlockchain } from '../contexts/BlockchainContext';
+import * as blockchainService from '../services/blockchain';
 import { generateUniversalLink, shareViaIOS, copyToClipboard, generateShareText } from '../utils/universalLinks';
 
 // Import UI components
@@ -9,13 +9,25 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 
+// Utility functions for formatting
+const formatSuiAmount = (amount) => {
+  const numAmount = parseFloat(amount);
+  return isNaN(numAmount) ? '0.0000000' : numAmount.toFixed(7);
+};
+
+const shortenId = (id) => {
+  if (!id) return '';
+  const str = id.toString();
+  if (str.length <= 12) return str;
+  return `${str.slice(0, 8)}...${str.slice(-4)}`;
+};
+
 /**
  * CreateEvent Page - Event creation form
  * Protected route - requires wallet connection
  */
 const CreateEvent = () => {
-  const { user } = useAuth();
-  const { createEvent, isLoading } = useBlockchain();
+  const { user, userAccountInfo, isCheckingAccount, createEvent, isLoading } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -41,16 +53,42 @@ const CreateEvent = () => {
       return;
     }
     
-    // Redirect participants to demo event - they can't create events
-    if (user.type === 'participant') {
-      navigate('/event/demo-blockchain-conference', { replace: true });
+    // Wait for account info to load
+    if (isCheckingAccount) {
       return;
     }
-  }, [user, navigate]);
+    
+    // Redirect if user doesn't have an account
+    if (!userAccountInfo?.hasAccount) {
+      navigate('/signin', { replace: true });
+      return;
+    }
+    
+    // Redirect participants - they can't create events
+    if (userAccountInfo?.role === 'participant') {
+      navigate('/', { 
+        replace: true,
+        state: { 
+          error: 'Participants cannot create events. Only organizers can create events.' 
+        }
+      });
+      return;
+    }
+    
+    // Only organizers can proceed
+    if (userAccountInfo?.role !== 'organizer') {
+      navigate('/signin', { replace: true });
+      return;
+    }
+  }, [user, userAccountInfo, isCheckingAccount, navigate]);
 
-  // Don't render if user is not available yet or is participant
-  if (!user || user.type === 'participant') {
-    return null;
+  // Don't render if user is not available yet, checking account, or not an organizer
+  if (!user || isCheckingAccount || !userAccountInfo?.hasAccount || userAccountInfo?.role !== 'organizer') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   /**
@@ -147,24 +185,80 @@ const CreateEvent = () => {
     setIsSubmitting(true);
     
     try {
-      // Combine date and time
-      const eventDateTime = new Date(formData.date + 'T' + formData.time).toISOString();
+      console.log('🔍 Starting event creation process...');
+      console.log('User address:', user.address);
       
+      // First, get the user's organizer object ID
+      console.log('🔍 Fetching organizer info...');
+      const organizerInfo = await blockchainService.getUserOrganizerObjectId(user.address);
+      
+      console.log('Organizer info received:', organizerInfo);
+      
+      if (!organizerInfo || !organizerInfo.objectId) {
+        throw new Error('No Organizer account found! You need to create an organizer account first.');
+      }
+      
+      console.log('✅ Organizer found with ID:', organizerInfo.objectId);
+      
+      // Combine date and time
+      const eventDateTime = new Date(formData.date + 'T' + formData.time);
+      console.log('Event date/time:', eventDateTime);
+      
+      // Convert form data to the format expected by the Move contract
       const eventData = {
-        title: formData.title.trim(),
-        description: formData.description.trim(),
-        date: eventDateTime,
+        name: formData.title.trim(),
+        category: 'General', // Default category, could be made a form field
         location: formData.location.trim(),
-        totalTickets: parseInt(formData.totalTickets),
-        price: parseFloat(formData.price),
-        imageUrl: formData.imageUrl.trim() || undefined,
-        creatorAddress: user.address
+        date: eventDateTime.toISOString(),
+        maxParticipants: parseInt(formData.totalTickets),
+        ticketPrice: parseFloat(formData.price),
+        places: ['General Admission'], // Could be expanded to support multiple ticket types
+        prices: [parseFloat(formData.price)],
+        capacities: [parseInt(formData.totalTickets)]
       };
 
-      const newEvent = await createEvent(eventData);
+      console.log('🔍 Creating event with data:', eventData);
+      console.log('🔍 Using organizer ID:', organizerInfo.objectId);
       
-      // Show success screen with shareable link instead of navigating away
-      setCreatedEvent(newEvent);
+      const result = await createEvent(eventData, organizerInfo.objectId);
+      
+      console.log('✅ Event created successfully!', result);
+      
+      // Extract the actual event object ID from transaction effects
+      let eventObjectId = null;
+      
+      if (result.effects?.created) {
+        // Look for the Event object in created objects
+        const eventObject = result.effects.created.find(obj => 
+          obj.objectType && obj.objectType.includes('::tickets_package::Event')
+        );
+        if (eventObject) {
+          eventObjectId = eventObject.objectId;
+          console.log('✅ Found event object ID:', eventObjectId);
+        }
+      }
+      
+      // Fallback: if we can't find the event ID, don't create shareable link
+      if (!eventObjectId) {
+        console.warn('⚠️ Could not extract event object ID from transaction result');
+        console.log('Transaction effects:', result.effects);
+        // Still show success but without shareable link
+        setCreatedEvent({
+          ...eventData,
+          id: null, // No ID means no shareable link
+          creatorAddress: user.address,
+          digest: result.digest
+        });
+      } else {
+        // Show success screen with proper event object ID for shareable link
+        setCreatedEvent({
+          ...eventData,
+          id: eventObjectId, // Use actual event object ID, not digest
+          creatorAddress: user.address,
+          digest: result.digest
+        });
+      }
+      
       setShowSuccess(true);
       
     } catch (error) {
@@ -247,7 +341,7 @@ const CreateEvent = () => {
               <Card.Header>
                 <Card.Title className="text-2xl text-slate-900 dark:text-slate-100">{createdEvent.title}</Card.Title>
                 <p className="text-slate-600 dark:text-slate-300">
-                  📍 {createdEvent.location} • 🎫 {createdEvent.totalTickets} tickets • 💰 {createdEvent.price} SUI
+                                    📍 {createdEvent.location} • 🎫 {createdEvent.totalTickets} tickets • 💰 {formatSuiAmount(createdEvent.price)} SUI
                 </p>
               </Card.Header>
               <Card.Body>
@@ -255,40 +349,27 @@ const CreateEvent = () => {
                   {createdEvent.description}
                 </p>
                 
-                {/* Shareable Link Section */}
+                {/* Shareable Link Section - only show if we have a valid event ID */}
+                {createdEvent?.id ? (
                 <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-6">
                   <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
-                    🔗 Share Your Event
+                    🎉 Event Created Successfully!
                   </h3>
                   <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                    Share this link with potential attendees to let them purchase tickets directly:
+                    Your event is now live on the blockchain. You can get a shareable link or manage it from your dashboard.
                   </p>
                   
-                  {/* Link Display */}
-                  <div className="flex items-center gap-2 p-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-600">
-                    <code className="flex-1 text-sm font-mono text-slate-700 dark:text-slate-300 break-all">
-                      {getEventUrl(createdEvent.id)}
-                    </code>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyToClipboardWithFeedback(getEventUrl(createdEvent.id))}
-                    >
-                      📋 Copy
-                    </Button>
-                  </div>
+                  {/* Get Link Button */}
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => copyToClipboardWithFeedback(getEventUrl(createdEvent.id))}
+                  >
+                    🔗 Get Shareable Link
+                  </Button>
+
                   
-                  {/* Native Share Button for iPhone */}
-                  {navigator.share && (
-                    <Button
-                      className="w-full mb-4"
-                      onClick={() => handleShare('native', getEventUrl(createdEvent.id))}
-                    >
-                      📱 Share via iPhone
-                    </Button>
-                  )}
-                  
-                  {/* Social Sharing Buttons */}
+
                   <div className="flex gap-3 mt-4 justify-center">
                     <Button
                       size="sm"
@@ -297,32 +378,38 @@ const CreateEvent = () => {
                     >
                       � Twitter
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleShare('facebook', getEventUrl(createdEvent.id))}
-                    >
-                      📘 Facebook
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleShare('email', getEventUrl(createdEvent.id))}
-                    >
-                      ✉️ Email
-                    </Button>
+
+
                   </div>
                 </div>
+                ) : (
+                  /* No event ID available - show transaction info instead */
+                  <div className="bg-slate-50 dark:bg-slate-700 rounded-lg p-6">
+                    <h3 className="text-lg font-semibold mb-3 text-slate-800 dark:text-slate-200">
+                      ⚠️ Event Created (Link Unavailable)
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">
+                      Your event was successfully created on the blockchain! However, we couldn't extract the event ID for direct linking. You can view your events in the dashboard.
+                    </p>
+                    {createdEvent?.digest && (
+                      <div className="mt-3">
+                        <p className="text-xs text-slate-500">Transaction ID: {createdEvent.digest}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </Card.Body>
             </Card>
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to={`/event/${createdEvent.id}`}>
-                <Button size="lg" variant="primary" className="w-full sm:w-auto">
-                  👀 View Event Page
-                </Button>
-              </Link>
+              {createdEvent?.id && (
+                <Link to={`/event/${createdEvent.id}`}>
+                  <Button size="lg" variant="primary" className="w-full sm:w-auto">
+                    👀 View Event Page
+                  </Button>
+                </Link>
+              )}
               <Link to="/profile">
                 <Button size="lg" variant="outline" className="w-full sm:w-auto">
                   📊 My Events Dashboard

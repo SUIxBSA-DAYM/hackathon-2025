@@ -9,6 +9,19 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Modal from '../components/ui/Modal';
 
+// Utility functions for formatting
+const formatSuiAmount = (amount) => {
+  const numAmount = parseFloat(amount);
+  return isNaN(numAmount) ? '0.0000000' : numAmount.toFixed(7);
+};
+
+const shortenId = (id) => {
+  if (!id) return '';
+  const str = id.toString();
+  if (str.length <= 12) return str;
+  return `${str.slice(0, 8)}...${str.slice(-4)}`;
+};
+
 /**
  * Verifier Page - Check-in interface for event staff
  * Allows verification of ticket ownership using wallet signatures

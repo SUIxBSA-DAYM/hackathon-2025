@@ -6,7 +6,7 @@
 // Contract configuration - UPDATE THESE WITH YOUR ACTUAL VALUES
 export const MOVE_CONFIG = {
   // Replace with your actual package ID after deployment
-  PACKAGE_ID: "0x760fea41cd256e223715b22f8ec89143b877453915439c4a698c5e7062a6ca5b",
+  PACKAGE_ID: "0xbd3e4161047c03bbdda2a1f0e2218fed99bc8de17e670152474c0dac0d80233b",
   MODULE_NAME: "user",
   NETWORK: "testnet", // or "testnet", "mainnet"
 };
