@@ -2,12 +2,20 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useBlockchain } from '../contexts/BlockchainContext';
-import { mockEvent, mockEvents } from '../data/mockEvents';
+import { useSignAndExecuteTransaction } from '@mysten/dapp-kit';
 
 // Import UI components
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
+
+// Utility functions for formatting
+const formatSuiAmount = (amount) => {
+  if (!amount) return '0';
+  const num = parseFloat(amount);
+  // Format to 7 decimals then remove trailing zeros
+  return num.toFixed(7).replace(/\.?0+$/, '');
+};
 
 /**
  * EventRegister Page - Event details and ticket purchasing
@@ -19,6 +27,7 @@ const EventRegister = () => {
   const location = useLocation();
   const { user } = useAuth();
   const { getEventById, mintTicket, isLoading } = useBlockchain();
+  const { mutate: signAndExecute } = useSignAndExecuteTransaction();
 
   const [event, setEvent] = useState(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
@@ -30,26 +39,33 @@ const EventRegister = () => {
   const [purchaseError, setPurchaseError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Load event data (try mock data first, then blockchain)
+  // Load event data from blockchain
   useEffect(() => {
-    // Check if this is a mock event
-    const foundMockEvent = mockEvents.find(event => event.id === id);
-    if (foundMockEvent) {
-      setEvent(foundMockEvent);
-      return;
-    }
-    
-    // Otherwise try to load from blockchain
-    const eventData = getEventById(id);
-    if (eventData) {
-      setEvent(eventData);
-    } else {
-      // Default to main mock event for demo
-      if (id === 'demo-blockchain-conference') {
-        setEvent(mockEvent);
-      } else {
-        navigate('/');
+    const loadEvent = async () => {
+      try {
+        const eventData = await getEventById(id);
+        if (eventData) {
+          setEvent(eventData);
+        } else {
+          console.warn(`Event with ID ${id} not found`);
+          navigate('/', { 
+            state: { 
+              error: `Event with ID ${id} not found. Please check the event ID and try again.` 
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error loading event:', error);
+        navigate('/', { 
+          state: { 
+            error: 'Failed to load event details. Please try again later.' 
+          }
+        });
       }
+    };
+
+    if (id) {
+      loadEvent();
     }
   }, [id, getEventById, navigate]);
 
@@ -86,25 +102,45 @@ const EventRegister = () => {
     setPurchaseError('');
 
     try {
-      // For demo, we'll mint one ticket at a time
-      for (let i = 0; i < purchaseData.quantity; i++) {
-        await mintTicket(event.id, user.address, {
-          tier: purchaseData.tier,
-          eventTitle: event.title,
-          venue: event.location,
-          date: event.date
+      // Use real blockchain buyTicket function
+      const result = await mintTicket(event.id, user.address, {
+        seat: purchaseData.tier,
+        placeName: purchaseData.tier,
+        price: parseFloat(event.price),
+        quantity: purchaseData.quantity,
+        eventTitle: event.name,
+        venue: event.location
+      });
+
+      if (result.success && result.transaction) {
+        console.log('Transaction created, signing and executing...', result);
+        
+        // Sign and execute the transaction
+        signAndExecute({
+          transaction: result.transaction,
+          chain: 'sui:testnet',
+        }, {
+          onSuccess: (txResult) => {
+            console.log('Transaction executed successfully:', txResult);
+            setSuccessMessage(`Successfully purchased ${purchaseData.quantity} ticket${purchaseData.quantity > 1 ? 's' : ''}!`);
+            
+            // Update event data to reflect new availability
+            setEvent(prevEvent => ({
+              ...prevEvent,
+              availableTickets: prevEvent.availableTickets - purchaseData.quantity,
+              soldTickets: (prevEvent.soldTickets || 0) + purchaseData.quantity
+            }));
+          },
+          onError: (error) => {
+            console.error('Transaction execution failed:', error);
+            setPurchaseError(error.message || 'Transaction failed');
+          }
         });
+      } else {
+        setPurchaseError(result.message || 'Failed to create purchase transaction');
       }
 
-      setSuccessMessage(`Successfully purchased ${purchaseData.quantity} ticket${purchaseData.quantity > 1 ? 's' : ''}!`);
       setShowPurchaseModal(false);
-      
-      // Update event data to reflect new availability
-      setEvent(prevEvent => ({
-        ...prevEvent,
-        availableTickets: prevEvent.availableTickets - purchaseData.quantity,
-        soldTickets: (prevEvent.soldTickets || 0) + purchaseData.quantity
-      }));
       
     } catch (error) {
       console.error('Purchase error:', error);
@@ -313,7 +349,7 @@ const EventRegister = () => {
               {/* Price Display */}
               <div className="text-center p-6 bg-gradient-secondary/10 rounded-lg glass-card-inner">
                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Price per ticket</p>
-                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{event.price} SUI</p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-slate-100">{formatSuiAmount(event.price)} SUI</p>
               </div>
 
               {/* Availability Status */}
@@ -379,6 +415,7 @@ const EventRegister = () => {
         onClose={() => setShowPurchaseModal(false)}
         title="Purchase Tickets"
         size="sm"
+        className="text-slate-900 dark:text-slate-100"
       >
         <div className="space-y-4">
           {/* Quantity Selection */}
@@ -390,10 +427,10 @@ const EventRegister = () => {
               name="quantity"
               value={purchaseData.quantity}
               onChange={handlePurchaseChange}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:border-transparent"
             >
               {[...Array(Math.min(event.availableTickets, 10))].map((_, i) => (
-                <option key={i + 1} value={i + 1}>
+                <option key={i + 1} value={i + 1} className="bg-white dark:bg-slate-800">
                   {i + 1} {i === 0 ? 'ticket' : 'tickets'}
                 </option>
               ))}
@@ -409,19 +446,19 @@ const EventRegister = () => {
               name="tier"
               value={purchaseData.tier}
               onChange={handlePurchaseChange}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:border-transparent"
             >
-              <option value="General">General Admission</option>
-              <option value="VIP">VIP</option>
-              <option value="Premium">Premium</option>
+              <option value="General" className="bg-white dark:bg-slate-800">General Admission</option>
+              <option value="VIP" className="bg-white dark:bg-slate-800">VIP</option>
+              <option value="Premium" className="bg-white dark:bg-slate-800">Premium</option>
             </select>
           </div>
 
           {/* Total Price */}
-          <div className="p-4 bg-gradient-secondary/10 rounded-lg glass-card-inner">
+          <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
             <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-900 dark:text-slate-100">Total Cost:</span>
-              <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{totalPrice} SUI</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">Total Cost:</span>
+              <span className="text-lg font-bold text-primary">{formatSuiAmount(totalPrice)} SUI</span>
             </div>
           </div>
 

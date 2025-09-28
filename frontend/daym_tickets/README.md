@@ -1,36 +1,82 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 🎟️ DAYM Tickets - Frontend Application
 
-## Getting Started
+Modern React application for decentralized event ticketing on Sui blockchain.
 
-First, run the development server:
+## 🚀 Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Set up environment
+cp .env.example .env
+# Configure your Google OAuth credentials
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:5173](http://localhost:5173) to view the application.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## 🛠️ Built With
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **React 18** - Modern UI framework
+- **Vite** - Lightning-fast development server  
+- **Tailwind CSS** - Utility-first styling
+- **Sui dApp Kit** - Blockchain integration
+- **zkLogin** - Privacy-preserving authentication
 
-## Learn More
+## 📦 Available Scripts
 
-To learn more about Next.js, take a look at the following resources:
+- `npm run dev` - Start development server
+- `npm run build` - Create production build
+- `npm run preview` - Preview production build
+- `npm run test` - Run test suite
+- `npm run lint` - Check code quality
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🔧 Configuration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Environment Variables
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id
+VITE_REDIRECT_URI=http://localhost:5173/auth/callback  
+VITE_SUI_NETWORK=testnet
+VITE_PACKAGE_ID=0x...your_deployed_package_id
+```
 
-## Deploy on Vercel
+### Features
+✅ zkLogin Authentication  
+✅ Role-based Access Control  
+✅ Event Creation & Management  
+✅ NFT Ticket Purchasing  
+✅ Professional Verification Interface  
+✅ Responsive Design & Dark Mode
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 📁 Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── components/     # UI components
+├── contexts/       # React contexts  
+├── pages/         # Application pages
+├── services/      # Business logic
+├── config/        # Configuration
+└── utils/         # Utilities
+```
+
+## 🌐 Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Deploy to Vercel
+vercel deploy
+
+# Deploy to Netlify
+netlify deploy --prod
+```
+
+---
+
+For complete documentation, see the [main README](../../README.md).

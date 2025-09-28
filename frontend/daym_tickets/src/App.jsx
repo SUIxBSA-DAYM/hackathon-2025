@@ -1,5 +1,8 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
+import { createNetworkConfig, SuiClientProvider, WalletProvider } from '@mysten/dapp-kit';
+import { getFullnodeUrl } from '@mysten/sui/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { BlockchainProvider } from './contexts/BlockchainContext';
@@ -17,9 +20,19 @@ import Verifier from './pages/Verifier';
 // Import shared components
 import Navigation from './components/Navigation';
 
+// Configure networks for dApp Kit
+const { networkConfig } = createNetworkConfig({
+  testnet: { url: getFullnodeUrl('testnet') },
+  mainnet: { url: getFullnodeUrl('mainnet') },
+  devnet: { url: getFullnodeUrl('devnet') },
+});
+
+// Create a query client for React Query
+const queryClient = new QueryClient();
+
 /**
  * Main App component with routing and context providers
- * Provides theme management, authentication, and blockchain state
+ * Uses Sui dApp Kit for wallet management and blockchain connections
  */
 function App() {
   // Set up universal link meta tags for iPhone
@@ -28,41 +41,47 @@ function App() {
   }, []);
 
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BlockchainProvider>
-          <Router>
-            <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-              {/* Navigation component - shown on all pages */}
-              <Navigation />
-              
-              {/* Main content area */}
-              <main className="pb-4">
-                <Routes>
-                  {/* Public routes */}
-                  <Route path="/" element={<Home />} />
-                  <Route path="/signin" element={<SignIn />} />
-                  <Route path="/auth/callback" element={<AuthCallback />} />
-                  
-                  {/* Event routes */}
-                  <Route path="/event/:id" element={<EventRegister />} />
-                  
-                  {/* Protected routes (user must be connected) */}
-                  <Route path="/profile" element={<Profile />} />
-                  <Route path="/create" element={<CreateEvent />} />
-                  
-                  {/* Verifier route (special access) */}
-                  <Route path="/verify" element={<Verifier />} />
-                  
-                  {/* Fallback route */}
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-            </div>
-          </Router>
-        </BlockchainProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <SuiClientProvider networks={networkConfig} defaultNetwork="testnet">
+        <WalletProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <BlockchainProvider>
+                <Router>
+                  <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
+                    {/* Navigation component - shown on all pages */}
+                    <Navigation />
+                    
+                    {/* Main content area */}
+                    <main className="pb-4">
+                      <Routes>
+                        {/* Public routes */}
+                        <Route path="/" element={<Home />} />
+                        <Route path="/signin" element={<SignIn />} />
+                        <Route path="/auth/callback" element={<AuthCallback />} />
+                        
+                        {/* Event routes */}
+                        <Route path="/event/:id" element={<EventRegister />} />
+                        
+                        {/* Protected routes (user must be connected) */}
+                        <Route path="/profile" element={<Profile />} />
+                        <Route path="/create" element={<CreateEvent />} />
+                        
+                        {/* Verifier route (special access) */}
+                        <Route path="/verify" element={<Verifier />} />
+                        
+                        {/* Fallback route */}
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </main>
+                  </div>
+                </Router>
+              </BlockchainProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </WalletProvider>
+      </SuiClientProvider>
+    </QueryClientProvider>
   );
 }
 
