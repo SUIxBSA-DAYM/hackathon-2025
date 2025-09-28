@@ -16,7 +16,7 @@ module tickets_package::user{
         //history: vector<Nft> // Historique des tickets achetés
     } 
 
-    public struct Organizer has key {
+    public struct Organizer has key, store {
         id: UID,
         username: String,
         url: String,
@@ -39,19 +39,18 @@ module tickets_package::user{
     }
 
     /// Créer un nouvel organisateur
-    public fun create_organizer( url: String, events: vector<address>, username: String, ctx: &mut TxContext )
+    public fun create_organizer( url: String, username: String, ctx: &mut TxContext ): Organizer
     {
         let user = User {
             role: 1, // 1 pour Organizer
             username: username,
         };
-        let organizer = Organizer {
+        Organizer {
             id: object::new(ctx),
             url: url,
             events: vector::empty<address>(),
             username: user.username,
-        };
-        transfer::share_object(organizer); // Permet de partager l'objet Organizer
+        }
         // recall avec &mut organizer
     }
 
@@ -61,8 +60,8 @@ module tickets_package::user{
         client.username = username;
     }
 
-    /// Désactiver le client
- ///   public fun deactivate_client(client: &mut Client) {
+    // Désactiver le client
+ //   public fun deactivate_client(client: &mut Client) {
     //    client.is_active = false;
     //}
 
