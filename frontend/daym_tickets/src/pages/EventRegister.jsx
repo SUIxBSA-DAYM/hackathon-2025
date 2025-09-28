@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useBlockchain } from '../contexts/BlockchainContext';
-import { mockEvent, mockEvents } from '../data/mockEvents';
 
 // Import UI components
 import Button from '../components/ui/Button';
@@ -30,26 +29,33 @@ const EventRegister = () => {
   const [purchaseError, setPurchaseError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Load event data (try mock data first, then blockchain)
+  // Load event data from blockchain
   useEffect(() => {
-    // Check if this is a mock event
-    const foundMockEvent = mockEvents.find(event => event.id === id);
-    if (foundMockEvent) {
-      setEvent(foundMockEvent);
-      return;
-    }
-    
-    // Otherwise try to load from blockchain
-    const eventData = getEventById(id);
-    if (eventData) {
-      setEvent(eventData);
-    } else {
-      // Default to main mock event for demo
-      if (id === 'demo-blockchain-conference') {
-        setEvent(mockEvent);
-      } else {
-        navigate('/');
+    const loadEvent = async () => {
+      try {
+        const eventData = await getEventById(id);
+        if (eventData) {
+          setEvent(eventData);
+        } else {
+          console.warn(`Event with ID ${id} not found`);
+          navigate('/', { 
+            state: { 
+              error: `Event with ID ${id} not found. Please check the event ID and try again.` 
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error loading event:', error);
+        navigate('/', { 
+          state: { 
+            error: 'Failed to load event details. Please try again later.' 
+          }
+        });
       }
+    };
+
+    if (id) {
+      loadEvent();
     }
   }, [id, getEventById, navigate]);
 

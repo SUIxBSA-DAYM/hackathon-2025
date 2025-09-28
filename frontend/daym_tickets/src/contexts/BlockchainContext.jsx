@@ -1,6 +1,5 @@
 import { createContext, useContext, useReducer, useMemo, useCallback } from 'react';
 import * as blockchainService from '../services/blockchain';
-import { mockEvents } from '../data/mockEvents';
 
 const BlockchainContext = createContext();
 
@@ -34,7 +33,7 @@ const blockchainReducer = (state, action) => {
 };
 
 const initialState = {
-  events: mockEvents, // Initialize with mock events for demo
+  events: [], // Start with empty array - will load from blockchain
   tickets: [],
   isLoading: false,
   error: null
@@ -70,9 +69,10 @@ export const BlockchainProvider = ({ children }) => {
   }, []);
 
   /**
-   * Create a new event and mint initial tickets
+   * Create a new event (legacy compatibility function)
    * @param {Object} eventData - Event details
    * @returns {Promise<Object>} Created event object
+   * @deprecated Use walletService.createEvent instead
    */
   const createEvent = useCallback(async (eventData) => {
     return handleAsyncOperation(
@@ -138,7 +138,7 @@ export const BlockchainProvider = ({ children }) => {
    */
   const loadEvents = useCallback(async () => {
     return handleAsyncOperation(
-      () => blockchainService.getEventsMock(),
+      () => blockchainService.getAllEvents(),
       (result) => ({ type: 'SET_EVENTS', payload: result })
     );
   }, [handleAsyncOperation]);
@@ -150,7 +150,7 @@ export const BlockchainProvider = ({ children }) => {
    */
   const loadUserTickets = useCallback(async (address) => {
     return handleAsyncOperation(
-      () => blockchainService.getUserTicketsMock(address),
+      () => blockchainService.getUserTickets(address),
       (result) => ({ type: 'SET_TICKETS', payload: result })
     );
   }, [handleAsyncOperation]);
@@ -169,8 +169,22 @@ export const BlockchainProvider = ({ children }) => {
   }, [handleAsyncOperation]);
 
   // Utility functions
-  const getEventById = useCallback((eventId) => {
-    return state.events.find(event => event.id === eventId);
+  const getEventById = useCallback(async (eventId) => {
+    // First check local state
+    const localEvent = state.events.find(event => event.id === eventId);
+    if (localEvent) return localEvent;
+    
+    // If not found locally, fetch from blockchain
+    try {
+      const event = await blockchainService.getEventById(eventId);
+      if (event) {
+        dispatch({ type: 'ADD_EVENT', payload: event });
+      }
+      return event;
+    } catch (error) {
+      console.error('Error fetching event by ID:', error);
+      return null;
+    }
   }, [state.events]);
 
   const getUserTickets = useCallback((userAddress) => {

@@ -1,207 +1,90 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import zkLoginService from '../services/zklogin';
-import moveService from '../services/moveService';
-import { MOVE_CONFIG } from '../config/moveConfig';
+import { 
+  useCurrentAccount, 
+  useConnectWallet,
+  useDisconnectWallet,
+  useSuiClient 
+} from '@mysten/dapp-kit';
+import { useWalletOperations } from '../services/walletService';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
   const [balance, setBalance] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // dApp Kit hooks
+  const currentAccount = useCurrentAccount();
+  const { mutate: connect } = useConnectWallet();
+  const { mutate: disconnect } = useDisconnectWallet();
+  const suiClient = useSuiClient();
+  
+  // Wallet operations hook
+  const {
+    createOrganizer: createOrganizerTx,
+    registerForEvent: registerForEventTx,
+    createEvent: createEventTx,
+    isPending: txPending,
+    isSuccess: txSuccess
+  } = useWalletOperations();
 
-  // Load saved authentication state on mount
+  // Load balance when account changes
   useEffect(() => {
-    const loadAuthState = async () => {
-      setIsLoading(true);
-      try {
-        // Try to load existing zkLogin session
-        const hasValidSession = await zkLoginService.loadState();
-        if (hasValidSession) {
-          const profile = zkLoginService.getUserProfile();
-          if (profile) {
-            setUser(profile);
-            // Load balance for the authenticated user
-            await refreshBalance(profile.address);
-          }
+    if (currentAccount?.address) {
+      refreshBalance(currentAccount.address);
+    } else {
+      setBalance(0);
+    }
+  }, [currentAccount]);
+
+  /**
+   * Connect to a Sui wallet using dApp Kit
+   */
+  const connectWallet = () => {
+    setIsLoading(true);
+    connect(
+      { wallet: 'Sui Wallet' }, // Can be made dynamic to support multiple wallets
+      {
+        onSuccess: () => {
+          setIsLoading(false);
+        },
+        onError: (error) => {
+          console.error('Failed to connect wallet:', error);
+          setIsLoading(false);
         }
-      } catch (error) {
-        console.error('Failed to load auth state:', error);
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    loadAuthState();
-  }, []);
-
-  /**
-   * Initialize zkLogin flow and redirect to Google OAuth
-   */
-  const connectWallet = async () => {
-    try {
-      setIsInitializing(true);
-      
-      // Initialize zkLogin
-      await zkLoginService.initializeZkLogin();
-      
-      // Get Google OAuth URL and redirect
-      const authUrl = zkLoginService.getGoogleAuthUrl();
-      window.location.href = authUrl;
-      
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-      setIsInitializing(false);
-      
-      // Check if it's a configuration error
-      if (error.message.includes('Google Client ID is not configured')) {
-        throw new Error('zkLogin is not configured. Please contact the administrator.');
-      }
-      
-      throw new Error('Failed to initialize authentication. Please try again.');
-    }
+    );
   };
 
   /**
-   * Handle OAuth callback and complete zkLogin
-   */
-  const handleZkLoginCallback = async (callbackUrl) => {
-    try {
-      setIsLoading(true);
-      
-      // Extract JWT from callback URL
-      const jwt = zkLoginService.handleAuthCallback(callbackUrl);
-      
-      // Get user salt
-      await zkLoginService.getUserSalt(jwt);
-      
-      // Get zkLogin address
-      const address = await zkLoginService.getZkLoginAddress();
-      
-      // Save state for persistence
-      zkLoginService.saveState();
-      
-      // Get user profile
-      const profile = zkLoginService.getUserProfile();
-      setUser(profile);
-      
-      // Load user balance
-      await refreshBalance(address);
-      
-      return profile;
-    } catch (error) {
-      console.error('zkLogin callback error:', error);
-      throw new Error('Authentication failed. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Mock login function for development/testing
-   */
-  const mockLogin = async (userType = 'organizer') => {
-    try {
-      setIsLoading(true);
-      
-      // Create mock user profile
-      const mockUser = {
-        id: userType === 'organizer' ? 'mock-organizer-123' : 'mock-participant-456',
-        email: userType === 'organizer' ? 'organizer@example.com' : 'participant@example.com',
-        name: userType === 'organizer' ? 'Event Organizer' : 'Event Participant',
-        picture: 'https://via.placeholder.com/150',
-        address: userType === 'organizer' 
-          ? '0x1234567890abcdef1234567890abcdef12345678' 
-          : '0xabcdef1234567890abcdef1234567890abcdef12',
-        type: userType
-      };
-      
-      setUser(mockUser);
-      setBalance(100); // Mock balance
-      
-      return mockUser;
-    } catch (error) {
-      console.error('Mock login error:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  /**
-   * Disconnect wallet and clear authentication
+   * Disconnect from the current wallet
    */
   const disconnectWallet = () => {
-    zkLoginService.logout();
-    setUser(null);
+    disconnect();
     setBalance(0);
   };
 
   /**
    * Create an organizer on-chain using Move contract
-   * This is the simplest Move function to test integration
    */
-  const createOrganizerOnChain = async (organizerUrl = "https://myorganizer.com") => {
-    if (!user) {
-      throw new Error('User must be authenticated to create organizer');
+  const createOrganizerOnChain = async (name, email) => {
+    if (!currentAccount) {
+      throw new Error('Wallet must be connected to create organizer');
     }
 
     try {
       setIsLoading(true);
       
-      // Check if this is a mock user (for development testing)
-      if (user.id && user.id.includes('mock')) {
-        console.log('🧪 Mock user detected - simulating Move contract call');
-        
-        // Simulate successful organizer creation for mock users
-        const mockResult = {
-          digest: '0xmock-transaction-hash-' + Date.now(),
-          effects: { 
-            status: { status: 'success' },
-            gasUsed: { computationCost: '1000000', storageCost: '2000000' }
-          },
-          objectChanges: [
-            { 
-              type: 'created', 
-              objectId: '0xmock-organizer-object-' + Date.now(),
-              objectType: `${MOVE_CONFIG.PACKAGE_ID}::${MOVE_CONFIG.MODULE_NAME}::Organizer`
-            }
-          ],
-          timestamp: new Date().toISOString(),
-          checkpoint: Math.floor(Math.random() * 1000000)
-        };
-        
-        console.log('✅ Mock organizer created successfully!', mockResult);
-        return mockResult;
-      }
+      console.log('Creating organizer on-chain:', { name, email, address: currentAccount.address });
       
-      // Real zkLogin user flow
-      const zkWallet = zkLoginService.getWallet();
-      if (!zkWallet) {
-        // Additional debugging info
-        const isAuth = zkLoginService.isAuthenticated();
-        const hasJWT = !!zkLoginService.jwt;
-        const hasAddress = !!zkLoginService.zkLoginUserAddress;
-        const hasKeyPair = !!zkLoginService.ephemeralKeyPair;
-        
-        console.error('zkLogin wallet debug info:', {
-          isAuthenticated: isAuth,
-          hasJWT,
-          hasAddress,
-          hasKeyPair,
-          userAddress: zkLoginService.zkLoginUserAddress
-        });
-        
-        throw new Error('zkLogin wallet not available. Please re-authenticate with Google.');
-      }
-
-      console.log('Creating organizer on-chain for user:', user.email);
-      
-      // Call Move contract function
-      const result = await moveService.createOrganizer(zkWallet, organizerUrl);
+      // Use the wallet operations hook
+      const result = await createOrganizerTx(name, email, currentAccount.address);
       
       console.log('✅ Organizer created successfully!', result);
+      
+      // Refresh balance after transaction
+      await refreshBalance(currentAccount.address);
+      
       return result;
       
     } catch (error) {
@@ -213,31 +96,81 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Test Move package connectivity
+   * Register for an event on-chain
    */
-  const testMovePackage = async () => {
+  const registerForEvent = async (eventId, name, email) => {
+    if (!currentAccount) {
+      throw new Error('Wallet must be connected to register for event');
+    }
+
     try {
-      const exists = await moveService.checkPackageExists();
-      console.log('Move package exists:', exists);
-      return exists;
+      setIsLoading(true);
+      
+      console.log('Registering for event:', { eventId, name, email, address: currentAccount.address });
+      
+      // Use the wallet operations hook
+      const result = await registerForEventTx(eventId, name, email);
+      
+      console.log('✅ Event registration successful!', result);
+      
+      // Refresh balance after transaction
+      await refreshBalance(currentAccount.address);
+      
+      return result;
+      
     } catch (error) {
-      console.error('Move package test failed:', error);
-      return false;
+      console.error('Failed to register for event:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Create an event on-chain
+   */
+  const createEvent = async (eventData) => {
+    if (!currentAccount) {
+      throw new Error('Wallet must be connected to create event');
+    }
+
+    try {
+      setIsLoading(true);
+      
+      console.log('Creating event on-chain:', eventData);
+      
+      // Use the wallet operations hook
+      const result = await createEventTx(eventData);
+      
+      console.log('✅ Event created successfully!', result);
+      
+      // Refresh balance after transaction
+      await refreshBalance(currentAccount.address);
+      
+      return result;
+      
+    } catch (error) {
+      console.error('Failed to create event:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   /**
    * Refresh user balance
    */
-  const refreshBalance = async (address = user?.address) => {
+  const refreshBalance = async (address = currentAccount?.address) => {
     if (!address) return;
     
     try {
-      // In a real implementation, you would fetch the actual balance from the blockchain
-      // For now, we'll simulate a balance
-      const mockBalance = Math.floor(Math.random() * 1000) + 100;
-      setBalance(mockBalance);
-      return mockBalance;
+      const balance = await suiClient.getBalance({
+        owner: address,
+      });
+      
+      const suiBalance = parseInt(balance.totalBalance) / 1_000_000_000; // Convert MIST to SUI
+      setBalance(suiBalance);
+      return suiBalance;
     } catch (error) {
       console.error('Failed to refresh balance:', error);
       return balance;
@@ -245,71 +178,58 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Get zkLogin service instance for transaction signing
+   * Check if user is connected
    */
-  const getZkLoginService = () => {
-    // For mock users, return a mock service
-    if (user && user.id && user.id.includes('mock')) {
-      console.log('🧪 Returning mock zkLogin service for testing');
-      return {
-        isAuthenticated: () => true,
-        getWallet: () => ({
-          address: user.address,
-          signAndExecuteTransaction: async (txBlock) => {
-            // Mock transaction execution
-            return {
-              digest: '0xmock-tx-' + Date.now(),
-              effects: { status: { status: 'success' } }
-            };
-          }
-        })
-      };
-    }
-
-    // Real zkLogin service
-    if (!zkLoginService.isAuthenticated()) {
-      const debugInfo = {
-        hasJWT: !!zkLoginService.jwt,
-        hasAddress: !!zkLoginService.zkLoginUserAddress,
-        hasKeyPair: !!zkLoginService.ephemeralKeyPair,
-        userExists: !!user
-      };
-      console.error('zkLogin service debug info:', debugInfo);
-      throw new Error('User not authenticated with zkLogin. Please sign in with Google.');
-    }
-    
-    return zkLoginService;
+  const isConnected = () => {
+    return !!currentAccount;
   };
 
   /**
-   * Debug zkLogin state - helpful for troubleshooting
+   * Get user address
    */
-  const debugZkLogin = () => {
-    console.log('🐛 Debug zkLogin called from AuthContext');
-    zkLoginService.debugLocalStorage();
+  const getUserAddress = () => {
+    return currentAccount?.address || null;
+  };
+
+  /**
+   * Get user display name
+   */
+  const getUserName = () => {
+    return currentAccount?.label || 'Unknown User';
   };
 
   const value = {
     // State
-    user,
+    user: currentAccount ? {
+      address: currentAccount.address,
+      name: currentAccount.label || 'Sui User',
+      type: 'wallet' // Simple type for wallet users
+    } : null,
+    currentAccount,
     balance,
-    isLoading,
-    isInitializing,
+    isLoading: isLoading || txPending, // Include transaction pending state
+    isConnected: isConnected(),
+    
+    // Transaction states
+    txPending,
+    txSuccess,
     
     // Authentication functions
     connectWallet,
-    handleZkLoginCallback,
     disconnectWallet,
-    mockLogin, // Keep for development/testing
     
     // Move contract functions
     createOrganizerOnChain,
-    testMovePackage,
+    registerForEvent,
+    createEvent,
     
     // Utility functions
     refreshBalance,
-    getZkLoginService,
-    debugZkLogin // Add debug function
+    getUserAddress,
+    getUserName,
+    
+    // dApp Kit integration
+    suiClient
   };
 
   return (

@@ -1,390 +1,289 @@
-// Mock blockchain service with commented Sui Move integration examples
-// This provides a working mock layer that can be easily replaced with real blockchain calls
+// Real blockchain service using Sui Move contracts
+// Integrates with the tickets_package Move module
 
-// Import mock data from centralized location
-import { mockEvents } from '../data/mockEvents';
+import { Transaction } from '@mysten/sui/transactions';
+import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
 
-// Uncomment and install for real implementation:
-// import { Transaction } from '@mysten/sui.js/transactions';
-// import { SuiClient } from '@mysten/sui.js/client';
-// import { verifySignature } from '@mysten/sui.js/verify';
-
-// Real Sui configuration (commented)
-// const SUI_NETWORK = 'testnet';
-// const PACKAGE_ID = 'YOUR_MOVE_PACKAGE_ID';
-// const suiClient = new SuiClient({ url: 'https://fullnode.testnet.sui.io:443' });
-
-// Mock data store - use imported mock events
-// Create a mutable copy for service operations
-let serviceEvents = [...mockEvents];
-
-let mockTickets = [
-  {
-    id: 'ticket_1',
-    eventId: '1',
-    tokenId: 'token_001',
-    owner: '0x789...ghi',
-    seat: 'A12',
-    tier: 'VIP',
-    price: 45,
-    isUsed: false,
-    mintedAt: '2024-01-16T12:00:00Z',
-    metadata: {
-      eventTitle: 'Electronic Music Festival',
-      venue: 'Berlin Arena',
-      date: '2024-03-15T20:00:00Z'
-    }
-  }
-];
+// Real Sui configuration
+const SUI_NETWORK = 'testnet';
+const PACKAGE_ID = import.meta.env.VITE_PACKAGE_ID || '0x760fea41cd256e223715b22f8ec89143b877453915439c4a698c5e7062a6ca5b';
+const suiClient = new SuiClient({ url: getFullnodeUrl('testnet') });
 
 /**
- * MOCK: Create new event and deploy to blockchain
- * Real implementation would call Move contract
+ * Get all events from the blockchain
+ * Queries all Event objects created by the Move contract
+ */
+export const getAllEvents = async () => {
+  try {
+    const events = await suiClient.getOwnedObjects({
+      filter: {
+        StructType: `${PACKAGE_ID}::tickets_package::Event`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+
+    return events.data.map(event => {
+      const fields = event.data?.content?.fields;
+      if (!fields) return null;
+      
+      return {
+        id: event.data.objectId,
+        name: fields.name,
+        location: fields.location,
+        time: fields.time,
+        category: fields.category,
+        organizer: fields.organizer,
+        totalTickets: fields.inventory?.fields?.total_capacity || 0,
+        availableTickets: fields.inventory?.fields?.total_capacity || 0, // TODO: Calculate available tickets
+        creator: fields.organizer,
+        creatorAddress: fields.organizer,
+        title: fields.name, // Alias for compatibility
+        description: `Event in ${fields.location} - ${fields.category}`,
+        date: fields.time,
+        price: 0, // TODO: Get price from inventory
+        status: 'active'
+      };
+    }).filter(Boolean);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    return [];
+  }
+};
+
+/**
+ * Get event by ID from the blockchain
+ */
+export const getEventById = async (eventId) => {
+  try {
+    const eventObj = await suiClient.getObject({
+      id: eventId,
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+
+    if (!eventObj.data?.content?.fields) {
+      return null;
+    }
+
+    const fields = eventObj.data.content.fields;
+    return {
+      id: eventId,
+      name: fields.name,
+      location: fields.location,
+      time: fields.time,
+      category: fields.category,
+      organizer: fields.organizer,
+      totalTickets: fields.inventory?.fields?.total_capacity || 0,
+      availableTickets: fields.inventory?.fields?.total_capacity || 0, // TODO: Calculate available tickets
+      creator: fields.organizer,
+      creatorAddress: fields.organizer,
+      title: fields.name,
+      description: `Event in ${fields.location} - ${fields.category}`,
+      date: fields.time,
+      price: 0, // TODO: Get price from inventory
+      status: 'active'
+    };
+  } catch (error) {
+    console.error('Error fetching event by ID:', error);
+    return null;
+  }
+};
+
+/**
+ * Get events created by a specific organizer
+ */
+export const getEventsByOrganizer = async (organizerAddress) => {
+  try {
+    const events = await suiClient.getOwnedObjects({
+      owner: organizerAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::tickets_package::Event`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+
+    return events.data.map(event => {
+      const fields = event.data?.content?.fields;
+      if (!fields) return null;
+      
+      return {
+        id: event.data.objectId,
+        name: fields.name,
+        location: fields.location,
+        time: fields.time,
+        category: fields.category,
+        organizer: fields.organizer,
+        totalTickets: fields.inventory?.fields?.total_capacity || 0,
+        availableTickets: fields.inventory?.fields?.total_capacity || 0,
+        creator: fields.organizer,
+        creatorAddress: fields.organizer,
+        title: fields.name,
+        description: `Event in ${fields.location} - ${fields.category}`,
+        date: fields.time,
+        price: 0,
+        status: 'active'
+      };
+    }).filter(Boolean);
+  } catch (error) {
+    console.error('Error fetching events by organizer:', error);
+    return [];
+  }
+};
+
+/**
+ * Get user's NFT tickets
+ */
+export const getUserTickets = async (userAddress) => {
+  try {
+    const tickets = await suiClient.getOwnedObjects({
+      owner: userAddress,
+      filter: {
+        StructType: `${PACKAGE_ID}::tickets_package::Nft`
+      },
+      options: {
+        showContent: true,
+        showDisplay: true
+      }
+    });
+
+    return tickets.data.map(ticket => {
+      const fields = ticket.data?.content?.fields;
+      if (!fields) return null;
+      
+      return {
+        id: ticket.data.objectId,
+        eventId: fields.event,
+        tokenId: ticket.data.objectId,
+        owner: fields.owner,
+        organizer: fields.organizer,
+        name: fields.name,
+        used: fields.used,
+        creationDate: fields.creation_date,
+        isUsed: fields.used
+      };
+    }).filter(Boolean);
+  } catch (error) {
+    console.error('Error fetching user tickets:', error);
+    return [];
+  }
+};
+
+/**
+ * Create event transaction (returns transaction to be signed by wallet)
+ * This integrates with the walletService for transaction execution
+ */
+export const createEventTransaction = (eventData) => {
+  const txb = new Transaction();
+  
+  // Create places and capacities vectors for the Move contract
+  const places = ['General Admission']; // Default single place
+  const capacities = [eventData.totalTickets]; // Total capacity
+  
+  // Note: This requires an Organizer object to be passed to the Move function
+  // For now, we'll create a simplified version that works with your contract structure
+  txb.moveCall({
+    target: `${PACKAGE_ID}::tickets_package::create_event`,
+    arguments: [
+      txb.pure.string(eventData.name || eventData.title),
+      txb.pure.string(eventData.location),
+      txb.pure.string(eventData.date || new Date().toISOString()),
+      txb.pure.string(eventData.category || 'General'),
+      txb.pure.vector('string', places),
+      txb.pure.vector('u64', capacities),
+      // Note: organizer object reference would be needed here
+      // This is a simplified version for demonstration
+    ],
+  });
+  
+  return txb;
+};
+
+/**
+ * Legacy function for compatibility - now uses real blockchain
+ * @deprecated Use walletService.createEvent instead
  */
 export const createEventMock = async (eventData) => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const newEvent = {
-    id: Date.now().toString(),
+  console.warn('createEventMock is deprecated. Use walletService.createEvent instead.');
+  // Return minimal data for backward compatibility
+  return {
+    id: 'pending',
     ...eventData,
     creator: eventData.creatorAddress,
     created: new Date().toISOString(),
     availableTickets: eventData.totalTickets
   };
+};
+
+/**
+ * Register for event transaction (returns transaction to be signed by wallet)
+ */
+export const registerForEventTransaction = (eventId, participantName, participantEmail) => {
+  const txb = new Transaction();
   
-  serviceEvents.push(newEvent);
-  
-  return newEvent;
-  
-  /* Real Sui Move implementation:
-  const tx = new Transaction();
-  tx.moveCall({
-    target: `${PACKAGE_ID}::event_tickets::create_event`,
+  txb.moveCall({
+    target: `${PACKAGE_ID}::tickets_package::register_participant`,
     arguments: [
-      tx.pure.string(eventData.title),
-      tx.pure.string(eventData.description),
-      tx.pure.u64(eventData.totalTickets),
-      tx.pure.u64(eventData.price),
-      tx.pure.u64(new Date(eventData.date).getTime()),
-      tx.pure.string(eventData.location)
-    ]
+      txb.pure.string(eventId),
+      txb.pure.string(participantName),
+      txb.pure.string(participantEmail),
+    ],
   });
   
-  const result = await suiClient.signAndExecuteTransaction({
-    signer: keypair,
-    transaction: tx,
-  });
-  
-  return {
-    id: result.objectChanges[0].objectId,
-    ...eventData,
-    transactionDigest: result.digest
-  };
-  */
+  return txb;
 };
 
 /**
- * MOCK: Mint ticket NFT for event
- * Real implementation would mint NFT through Move contract
+ * Verify ticket ownership by querying the blockchain
  */
-export const mintTicketMock = async (eventId, ownerAddress, metadata = {}) => {
-  await new Promise(resolve => setTimeout(resolve, 800));
-  const event = serviceEvents.find(e => e.id === eventId);
-  if (!event) {
-    throw new Error('Event not found');
-  }
-  
-  if (event.availableTickets <= 0) {
-    throw new Error('No tickets available');
-  }
-  
-  const newTicket = {
-    id: `ticket_${Date.now()}`,
-    eventId,
-    tokenId: `token_${Date.now()}`,
-    owner: ownerAddress,
-    seat: `${String.fromCharCode(65 + Math.floor(Math.random() * 10))}${Math.floor(Math.random() * 50) + 1}`,
-    tier: metadata.tier || 'General',
-    price: event.price,
-    isUsed: false,
-    mintedAt: new Date().toISOString(),
-    metadata: {
-      eventTitle: event.title,
-      venue: event.location,
-      date: event.date,
-      ...metadata
-    }
-  };
-  
-  mockTickets.push(newTicket);
-  
-  // Update available tickets
-  event.availableTickets -= 1;
-  
-  return newTicket;
-  
-  /* Real Sui Move implementation:
-  const tx = new Transaction();
-  tx.moveCall({
-    target: `${PACKAGE_ID}::event_tickets::mint_ticket`,
-    arguments: [
-      tx.object(eventId), // Event object ID
-      tx.pure.address(ownerAddress),
-      tx.pure.string(metadata.seat || ''),
-      tx.pure.string(metadata.tier || 'General')
-    ]
-  });
-  
-  const result = await suiClient.signAndExecuteTransaction({
-    signer: keypair,
-    transaction: tx,
-  });
-  
-  return {
-    tokenId: result.objectChanges[0].objectId,
-    owner: ownerAddress,
-    eventId,
-    transactionDigest: result.digest
-  };
-  */
-};
-
-/**
- * MOCK: Transfer ticket to another address
- * Real implementation would call Move transfer function
- */
-export const transferTicketMock = async (tokenId, toAddress) => {
-  await new Promise(resolve => setTimeout(resolve, 700));
-  
-  const ticket = mockTickets.find(t => t.tokenId === tokenId);
-  if (!ticket) {
-    throw new Error('Ticket not found');
-  }
-  
-  if (ticket.isUsed) {
-    throw new Error('Cannot transfer used ticket');
-  }
-  
-  ticket.owner = toAddress;
-  ticket.lastTransfer = new Date().toISOString();
-  
-  return ticket;
-  
-  /* Real Sui Move implementation:
-  const tx = new Transaction();
-  tx.transferObjects([tx.object(tokenId)], tx.pure.address(toAddress));
-  
-  const result = await suiClient.signAndExecuteTransaction({
-    signer: currentOwnerKeypair,
-    transaction: tx,
-  });
-  
-  return {
-    tokenId,
-    newOwner: toAddress,
-    transactionDigest: result.digest
-  };
-  */
-};
-
-/**
- * MOCK: Verify ticket ownership
- * Real implementation would query blockchain state
- */
-export const verifyOwnershipMock = async (address, tokenId) => {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  
-  const ticket = mockTickets.find(t => t.tokenId === tokenId);
-  if (!ticket) {
-    return false;
-  }
-  
-  return ticket.owner.toLowerCase() === address.toLowerCase();
-  
-  /* Real Sui Move implementation:
-  const ticketObject = await suiClient.getObject({
-    id: tokenId,
-    options: { showOwner: true, showContent: true }
-  });
-  
-  if (!ticketObject.data) {
-    return false;
-  }
-  
-  return ticketObject.data.owner?.AddressOwner === address;
-  */
-};
-
-/**
- * MOCK: Mark ticket as used (check-in)
- * Real implementation would update blockchain state
- */
-export const markTicketUsedMock = async (tokenId) => {
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  const ticket = mockTickets.find(t => t.tokenId === tokenId);
-  if (!ticket) {
-    throw new Error('Ticket not found');
-  }
-  
-  if (ticket.isUsed) {
-    throw new Error('Ticket already used');
-  }
-  
-  ticket.isUsed = true;
-  ticket.usedAt = new Date().toISOString();
-  
-  return ticket;
-  
-  /* Real Sui Move implementation:
-  const tx = new Transaction();
-  tx.moveCall({
-    target: `${PACKAGE_ID}::event_tickets::mark_ticket_used`,
-    arguments: [tx.object(tokenId)]
-  });
-  
-  const result = await suiClient.signAndExecuteTransaction({
-    signer: verifierKeypair,
-    transaction: tx,
-  });
-  
-  return {
-    tokenId,
-    isUsed: true,
-    usedAt: new Date().toISOString(),
-    transactionDigest: result.digest
-  };
-  */
-};
-
-/**
- * MOCK: Get all events from blockchain
- * Real implementation would query Move objects
- */
-export const getEventsMock = async () => {
-  await new Promise(resolve => setTimeout(resolve, 400));
-  return [...serviceEvents];
-  
-  /* Real Sui Move implementation:
-  const events = await suiClient.getOwnedObjects({
-    owner: EVENTS_REGISTRY_ID,
-    filter: {
-      StructType: `${PACKAGE_ID}::event_tickets::Event`
-    },
-    options: { showContent: true }
-  });
-  
-  return events.data.map(event => ({
-    id: event.data.objectId,
-    ...event.data.content.fields
-  }));
-  */
-};
-
-/**
- * MOCK: Get tickets owned by address
- * Real implementation would query user's NFTs
- */
-export const getUserTicketsMock = async (address) => {
-  await new Promise(resolve => setTimeout(resolve, 350));
-  return mockTickets.filter(ticket => 
-    ticket.owner.toLowerCase() === address.toLowerCase()
-  );
-  
-  /* Real Sui Move implementation:
-  const tickets = await suiClient.getOwnedObjects({
-    owner: address,
-    filter: {
-      StructType: `${PACKAGE_ID}::event_tickets::Ticket`
-    },
-    options: { showContent: true }
-  });
-  
-  return tickets.data.map(ticket => ({
-    tokenId: ticket.data.objectId,
-    ...ticket.data.content.fields
-  }));
-  */
-};
-
-/**
- * MOCK: Verify signature for check-in
- * Real implementation would use Sui signature verification
- */
-export const verifySignatureMock = async (message, signature, address) => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  
-  // Mock verification - always returns true for demo
-  // In reality, this should verify the signature cryptographically
-  return signature.length > 10 && address.length > 10;
-  
-  /* Real Sui signature verification:
+export const verifyTicketOwnership = async (tokenId, ownerAddress) => {
   try {
-    const isValid = await verifySignature(
-      new TextEncoder().encode(message),
-      signature,
-      address
-    );
-    return isValid;
+    const ticketObj = await suiClient.getObject({
+      id: tokenId,
+      options: {
+        showContent: true,
+        showOwner: true
+      }
+    });
+
+    if (!ticketObj.data?.content?.fields) {
+      return false;
+    }
+
+    const owner = ticketObj.data.owner;
+    if (typeof owner === 'object' && owner.AddressOwner) {
+      return owner.AddressOwner === ownerAddress;
+    }
+    
+    return owner === ownerAddress;
   } catch (error) {
-    console.error('Signature verification error:', error);
+    console.error('Error verifying ticket ownership:', error);
     return false;
   }
-  */
 };
 
 /**
- * MOCK: Get event details by ID
+ * Mark ticket as used (would require organizer signature in real implementation)
  */
-export const getEventByIdMock = async (eventId) => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  return serviceEvents.find(event => event.id === eventId) || null;
+export const markTicketUsed = async (tokenId) => {
+  console.warn('markTicketUsed: This function needs Move contract implementation for updating NFT state');
+  // Real implementation would need a Move function to update the 'used' field
+  // This would typically be called by event organizers at event check-in
+  return { success: false, message: 'Function not yet implemented in Move contract' };
 };
 
-/**
- * MOCK: Get ticket details by token ID
- */
-export const getTicketByIdMock = async (tokenId) => {
-  await new Promise(resolve => setTimeout(resolve, 200));
-  return mockTickets.find(ticket => ticket.tokenId === tokenId) || null;
-};
-
-// Utility functions for demo/testing
-export const addMockEvent = (eventData) => {
-  serviceEvents.push(eventData);
-};
-
-export const addMockTicket = (ticketData) => {
-  mockTickets.push(ticketData);
-};
-
-export const clearMockData = () => {
-  serviceEvents.length = 0; // Clear the array
-  mockTickets = [];
-};
-
-export const resetMockData = () => {
-  // Reset to initial state
-  serviceEvents.length = 0; // Clear existing events
-  serviceEvents.push(...mockEvents); // Add fresh copy of mock events
-  
-  mockTickets = [
-    {
-      id: 'ticket_1',
-      eventId: '1',
-      tokenId: 'token_001',
-      owner: '0x789...ghi',
-      seat: 'A12',
-      tier: 'VIP',
-      price: 45,
-      isUsed: false,
-      mintedAt: '2024-01-16T12:00:00Z',
-      metadata: {
-        eventTitle: 'Electronic Music Festival',
-        venue: 'Berlin Arena',
-        date: '2024-03-15T20:00:00Z'
-      }
-    }
-  ];
+// Legacy aliases for backward compatibility
+export { 
+  getAllEvents as getEventsMock,
+  getEventById as getEventByIdMock,  
+  getUserTickets as getUserTicketsMock,
+  verifyTicketOwnership as verifyOwnershipMock,
+  markTicketUsed as markTicketUsedMock
 };

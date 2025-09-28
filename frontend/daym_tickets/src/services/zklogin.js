@@ -47,7 +47,7 @@ export class ZkLoginService {
       this.maxEpoch = Number(epoch) + 2; // Active for 2 epochs
 
       // Generate ephemeral key pair
-      this.ephemeralKeyPair = new Ed25519Keypair.generate();
+      this.ephemeralKeyPair = new Ed25519Keypair();
       console.log('Generated ephemeral key pair with public key:', this.ephemeralKeyPair.getPublicKey());
       
       // Generate randomness and nonce
@@ -64,15 +64,18 @@ export class ZkLoginService {
       // 🚨 CRITICAL: Save ephemeral key pair and essential state BEFORE OAuth redirect
       console.log('💾 Saving essential zkLogin state before OAuth redirect...');
       try {
-        // Store the secret key (only first 32 bytes)
-        const secretKey32Bytes = this.ephemeralKeyPair.export().privateKey;
+        // Store the private key using the proper export method (following official guide)
+        const secretKeyBytes = this.ephemeralKeyPair.getSecretKey().slice(0, 32); // First 32 bytes
+        // Encode the secret key as base64 for storage
+        const privateKey = btoa(String.fromCharCode(...secretKeyBytes));
         
         // Store essential state (nonce will be extracted from JWT)
-        localStorage.setItem('zklogin_ephemeral_key_temp', secretKeyBase64);
+        localStorage.setItem('zklogin_ephemeral_key_temp', privateKey);
         localStorage.setItem('zklogin_max_epoch_temp', this.maxEpoch.toString());
         localStorage.setItem('zklogin_randomness_temp', this.randomness.toString());
         
         console.log('✅ Pre-OAuth state saved to localStorage');
+        console.log('🔍 Saved private key length:', privateKey.length);
         console.log('🔍 Saved maxEpoch:', this.maxEpoch);
         console.log('🔍 Saved randomness:', this.randomness);
         console.log('🔍 Nonce will be extracted from JWT after OAuth callback');
@@ -103,7 +106,7 @@ export class ZkLoginService {
       client_id: GOOGLE_CLIENT_ID,
       response_type: 'id_token',
       redirect_uri: REDIRECT_URL,
-      scope: 'openid email',
+      scope: 'openid',
       nonce: this.nonce
     });
 
@@ -154,6 +157,7 @@ export class ZkLoginService {
       // Fallback: try to get nonce from JWT payload if not in URL
       try {
         const payload = this.decodeJWT(idToken);
+        console.log('Decoded JWT payload for nonce extraction:', payload);
         this.nonce = payload.nonce;
         console.log('✅ Nonce extracted from JWT payload (fallback):', this.nonce);
       } catch (error) {
@@ -522,15 +526,17 @@ export class ZkLoginService {
         hasSalt: !!this.userSalt,
         hasAddress: !!this.zkLoginUserAddress,
         hasMaxEpoch: !!this.maxEpoch,
-        hasRandomness: !!this.randomness
+        hasRandomness: !!this.randomness,
+        maxEpochValue: this.maxEpoch,
+        randomnessValue: this.randomness
       });
 
       if (this.ephemeralKeyPair) {
-        // Save the secret key as a comma-separated array of bytes for reliable restoration
-        const secretKey = this.ephemeralKeyPair.getSecretKey();
-        const secretKeyArray = Array.from(secretKey).join(',');
-        localStorage.setItem('zklogin_ephemeral_key', secretKeyArray);
-        console.log('💾 Ephemeral key saved, length:', secretKeyArray.length);
+        // Use the same format as the temporary storage for consistency
+        const exportedKeyPair = this.ephemeralKeyPair.getSecretKey().slice(-32); // Last 32 bytes
+        const privateKey = btoa(String.fromCharCode(...exportedKeyPair)); 
+        localStorage.setItem('zklogin_ephemeral_key', privateKey);
+        console.log('💾 Ephemeral key saved, length:', privateKey.length);
       } else {
         console.warn('⚠️ No ephemeral key pair to save!');
       }
@@ -547,18 +553,33 @@ export class ZkLoginService {
         localStorage.setItem('zklogin_address', this.zkLoginUserAddress);
         console.log('💾 Address saved');
       }
-      if (this.maxEpoch) {
+      
+      // Handle maxEpoch - try to get from current system state if missing
+      if (this.maxEpoch && this.maxEpoch > 0) {
         localStorage.setItem('zklogin_max_epoch', this.maxEpoch.toString());
-        console.log('💾 Max epoch saved');
+        console.log('💾 Max epoch saved:', this.maxEpoch);
       } else {
-        console.warn('⚠️ No maxEpoch to save!');
+        console.warn('⚠️ No valid maxEpoch to save! Attempting to get current epoch...');
+        // Try to get current epoch if missing (async operation)
+        this.suiClient.getLatestSuiSystemState().then(({ epoch }) => {
+          this.maxEpoch = Number(epoch) + 2;
+          localStorage.setItem('zklogin_max_epoch', this.maxEpoch.toString());
+          console.log('💾 Max epoch recovered and saved:', this.maxEpoch);
+        }).catch(err => console.error('Failed to get current epoch:', err));
       }
-      if (this.randomness) {
+      
+      // Handle randomness - generate new one if missing
+      if (this.randomness && this.randomness.length > 0) {
         localStorage.setItem('zklogin_randomness', this.randomness.toString());
-        console.log('💾 Randomness saved');
+        console.log('💾 Randomness saved:', this.randomness);
       } else {
-        console.warn('⚠️ No randomness to save!');
+        console.warn('⚠️ No valid randomness to save! Generating new randomness...');
+        // Generate new randomness if missing
+        this.randomness = generateRandomness().toString();
+        localStorage.setItem('zklogin_randomness', this.randomness);
+        console.log('💾 New randomness generated and saved:', this.randomness);
       }
+      
       console.log('✅ All zkLogin state saved to localStorage');
     } catch (error) {
       console.error('❌ Failed to save zkLogin state:', error);
@@ -590,18 +611,19 @@ export class ZkLoginService {
 
       if (ephemeralKey && jwt && userSalt && address) {
         try {
-          // Parse the comma-separated byte array back to Uint8Array
-          const keyBytes = ephemeralKey.split(',').map(s => parseInt(s.trim()));
-          const keyUint8Array = new Uint8Array(keyBytes);
+          // Handle both old format (comma-separated bytes) and new format (exported private key)
+          if (ephemeralKey.includes(',')) {
+            // Old format: comma-separated byte array
+            const keyBytes = ephemeralKey.split(',').map(s => parseInt(s.trim()));
+            const keyUint8Array = new Uint8Array(keyBytes);
+            this.ephemeralKeyPair = Ed25519Keypair.fromSecretKey(keyUint8Array);
+            console.log('✅ Ephemeral key pair restored from comma-separated format');
+          } else {
+            // New format: exported private key (consistent with temporary storage)
+            this.ephemeralKeyPair = Ed25519Keypair.fromSecretKey(ephemeralKey);
+            console.log('✅ Ephemeral key pair restored from exported private key format');
+          }
           
-          console.log('Parsed ephemeral key:', {
-            originalLength: ephemeralKey.length,
-            byteArrayLength: keyBytes.length,
-            uint8ArrayLength: keyUint8Array.length,
-            firstFewBytes: keyBytes.slice(0, 5)
-          });
-          
-          this.ephemeralKeyPair = Ed25519Keypair.fromSecretKey(keyUint8Array);
           console.log('✅ Ephemeral key pair restored successfully');
           
         } catch (keyError) {
