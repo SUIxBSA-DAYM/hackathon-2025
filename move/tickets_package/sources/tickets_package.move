@@ -190,7 +190,7 @@ module tickets_package::tickets_package {
     }
 
     public fun validate_ticket(nft: &mut UserNft, event: address) {
-        assert!(nft.organizer == organizer, EEventMismatch);
+        assert!(nft.event == event, EEventMismatch);
         assert!(!nft.used, ENFTAlreadyUsed);
         nft.used = true;
     }
